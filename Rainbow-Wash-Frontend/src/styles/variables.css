@@ -1,0 +1,25 @@
+:root {
+  --navy: #0c2947;
+  --navy-deep: #071a2f;
+  --blue: #1f6fb2;
+  --sky: #4fb3e8;
+  --ice: #f2f8fc;
+  --paper: #ffffff;
+  --ink: #12233d;
+  --ink-soft: #4c6079;
+  --line: #dde7f0;
+  --good: #2fae66;
+  --warn: #e0932b;
+  --bad: #e0473f;
+
+  --rainbow-red: #ef4136;
+  --rainbow-orange: #f7941d;
+  --rainbow-yellow: #ffce33;
+  --rainbow-green: #39b54a;
+  --rainbow-blue: #27aae1;
+  --rainbow-purple: #8e44ad;
+
+  --font-display: "Baloo 2", sans-serif;
+  --font-body: "Work Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
