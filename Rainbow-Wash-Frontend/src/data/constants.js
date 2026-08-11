@@ -77,7 +77,7 @@ export const PRODUCTS = [
 export const TRACK_STAGES = ["Received", "Washing", "Completed", "Delivered"];
 
 // Order/booking receipts send straight to this WhatsApp number as a copy for staff.
-export const WHATSAPP_NUMBER = "234813692900"; // ⚠️ double-check this — it's 12 digits, one short of the usual 13 (234 + 10-digit local number)
+export const WHATSAPP_NUMBER = "2348136920900"; // ⚠️ double-check this — it's 12 digits, one short of the usual 13 (234 + 10-digit local number)
 export const buildWhatsAppLink = (message) => `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 
 export const DELIVERY_FEE = 2500;
