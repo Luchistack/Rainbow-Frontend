@@ -4,7 +4,7 @@ import { Search, CheckCircle2, Circle, Bell, MessageCircle, Phone } from "lucide
 import PageHeader from "../components/PageHeader";
 import Steps from "../components/Steps";
 import FAQ from "../components/FAQ";
-import { CLOTHING_RATES, LAUNDRY_SERVICE_LEVELS, TRACK_STAGES } from "../data/constants";
+import { TRACK_STAGES } from "../data/constants";
 import { money } from "../utils/format";
 import { useApp } from "../context/AppContext";
 
@@ -18,7 +18,7 @@ const TRACK_STEPS = [
 const TRACK_FAQ = [
   { q: "How often does the status update?", a: "As soon as staff move your order to the next stage in our system, usually within the timeframes shown on the Order Laundry page." },
   { q: "Will I be notified automatically?", a: "Once the backend notification system is live, you'll get an SMS or email whenever your status changes. For now, check this page with your reference." },
-  { q: "I lost my reference number, what do I do?", a: "Contact us on WhatsApp or phone with your name and approximate drop off time and we'll look it up." },
+  { q: "I lost my reference number, what do I do?", a: "Contact us on WhatsApp or phone with your name and approximate drop-off time and we'll look it up." },
 ];
 
 export default function TrackOrder() {
@@ -61,8 +61,7 @@ export default function TrackOrder() {
               </div>
               <div className="rw-summary" style={{ marginTop: 10 }}>
                 <div className="rw-summary-row"><span>Reference</span><span className="mono">{found.id}</span></div>
-                <div className="rw-summary-row"><span>Items</span><span>{found.weight}kg · {CLOTHING_RATES.find((c) => c.id === found.clothType)?.label}</span></div>
-                <div className="rw-summary-row"><span>Service</span><span>{LAUNDRY_SERVICE_LEVELS.find((l) => l.id === found.level)?.label}</span></div>
+                <div className="rw-summary-row"><span>Items</span><span style={{ textAlign: "right", maxWidth: 260 }}>{found.items ? found.items.map((i) => `${i.name} ×${i.qty}${i.unit || ""}`).join(", ") : "—"}</span></div>
                 <div className="rw-summary-row total"><span>Total</span><span>{money(found.total)}</span></div>
               </div>
             </>

@@ -48,8 +48,8 @@ export default function Hero() {
         <div className="rw-eyebrow"><span className="dot" />Now open in Mende Maryland · Opened Aug 8th</div>
         <h1>Coloring your world with <em>cleanliness.</em></h1>
         <p className="lead">
-          Wash, iron, dry clean and deep clean, pickup and delivery included. Rainbow Wash takes the laundry
-          pile and the dusty upholstery off your to do list.
+          Wash, iron, dry clean and deep clean, pickup and delivery included. Rainbow Wash Laundry And Dry Cleaning Services takes the laundry
+          pile and the dusty upholstery off your to-do list.
         </p>
         <div className="rw-hero-actions">
           <Link to="/order-laundry" className="rw-btn rw-btn-rainbow">
@@ -62,10 +62,8 @@ export default function Hero() {
         <div className="rw-hero-stats">
           <div><b>7</b><span>Services offered</span></div>
           <div><b>7 days</b><span>Open every day</span></div>
-          <div><b>From</b><span>Pickup to Delivery</span></div>
+          <div><b>From {money(DELIVERY_FEE)}</b><span>Pickup to Delivery</span></div>
         </div>
-
-  {/* <div><b>From {money(DELIVERY_FEE)}</b><span>Pickup to Delivery</span></div> */}
 
         <div className="rw-hero-dots">
           {SLIDES.map((_, idx) => (

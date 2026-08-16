@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Lock, LayoutDashboard, Truck, Calendar, Package, Plus, ShoppingBag, History, Search, Archive, Shirt, RefreshCw } from "lucide-react";
-import { CLOTHING_RATES, LAUNDRY_SERVICE_LEVELS, TRACK_STAGES } from "../data/constants";
+import { TRACK_STAGES } from "../data/constants";
 import { money, formatPlacedAt, isToday, matchesRange } from "../utils/format";
 import { useApp } from "../context/AppContext";
 
@@ -50,7 +50,7 @@ export default function Admin() {
             Log in
           </button>
           <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 12 }}>
-            Demo mode — any details will log you in. Real authentication connects once the backend is live.
+            Demo mode, any details will log you in. Real authentication connects once the backend is live.
           </p>
         </div>
       </div>
@@ -72,7 +72,7 @@ export default function Admin() {
     todaysShopOrders.reduce((s, o) => s + o.total, 0);
 
   const updateOrderStatus = (id, status) => setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o)));
-  const updateWeight = (id, weight) => setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, weight: Number(weight) } : o)));
+  const updateOrderTotal = (id, total) => setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, total: Number(total) } : o)));
   const updateShopOrderStatus = (id, status) => setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o)));
   const restock = (id) => setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, stock: p.stock + RESTOCK_STEP } : p)));
   const updateProductField = (id, field, value) => setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
@@ -123,7 +123,7 @@ export default function Admin() {
       name: o.fullName,
       phone: o.phone,
       email: o.email,
-      details: `${CLOTHING_RATES.find((c) => c.id === o.clothType)?.label || o.clothType} · ${o.weight}kg · ${LAUNDRY_SERVICE_LEVELS.find((l) => l.id === o.level)?.label || o.level}`,
+      details: o.items ? o.items.map((i) => `${i.name} ×${i.qty}${i.unit || ""}`).join(", ") : "—",
       total: o.total,
       status: o.status,
     })),
@@ -175,7 +175,7 @@ export default function Admin() {
         {tab === "overview" && (
           <div>
             <div className="rw-admin-panel-head">
-              <h2 style={{ marginBottom: 0 }}>Overview — Today</h2>
+              <h2 style={{ marginBottom: 0 }}>Overview, Today</h2>
               <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={startNewDay}>
                 <RefreshCw size={14} /> Start New Day (clear all today's lists)
               </button>
@@ -192,7 +192,7 @@ export default function Admin() {
             </div>
             <p style={{ color: "var(--ink-soft)", fontSize: 14.5 }}>
               These numbers reset automatically at midnight, or instantly if you click "Start New Day" above.
-              Nothing is ever deleted — everything moves into <b>History</b>, searchable by day, week, month or year.
+              Nothing is ever deleted, everything moves into <b>History</b>, searchable by day, week, month or year.
             </p>
           </div>
         )}
@@ -201,7 +201,7 @@ export default function Admin() {
           <div>
             <div className="rw-admin-panel-head">
               <div>
-                <h2 style={{ marginBottom: 4 }}>Laundry Orders — Today</h2>
+                <h2 style={{ marginBottom: 4 }}>Laundry Orders, Today</h2>
                 <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Older orders have moved to History automatically.</p>
               </div>
               {todaysOrders.length > 0 && (
@@ -211,21 +211,19 @@ export default function Admin() {
               )}
             </div>
             <table className="rw-table">
-              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Type</th><th>Weight</th><th>Service</th><th>Phone</th><th>Email</th><th>Total</th><th>Status</th><th></th></tr></thead>
+              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Items</th><th>Phone</th><th>Email</th><th>Total (₦)</th><th>Status</th><th></th></tr></thead>
               <tbody>
                 {todaysOrders.map((o) => (
                   <tr key={o.id}>
                     <td className="mono">{o.id}</td>
                     <td>{formatPlacedAt(o.placedAt)}</td>
                     <td>{o.fullName || "—"}</td>
-                    <td>{CLOTHING_RATES.find((c) => c.id === o.clothType)?.label}</td>
-                    <td>
-                      <input type="number" step="0.5" style={{ width: 72, padding: "6px 8px" }} value={o.weight} onChange={(e) => updateWeight(o.id, e.target.value)} /> kg
-                    </td>
-                    <td>{LAUNDRY_SERVICE_LEVELS.find((l) => l.id === o.level)?.label}</td>
+                    <td style={{ maxWidth: 260, fontSize: 13 }}>{o.items ? o.items.map((i) => `${i.name} ×${i.qty}${i.unit || ""}`).join(", ") : "—"}</td>
                     <td>{o.phone || "—"}</td>
                     <td>{o.email || "—"}</td>
-                    <td>{money(o.total)}</td>
+                    <td>
+                      <input type="number" step="50" style={{ width: 90, padding: "6px 8px" }} value={o.total} onChange={(e) => updateOrderTotal(o.id, e.target.value)} />
+                    </td>
                     <td>
                       <select className="rw-status-select" value={o.status} onChange={(e) => updateOrderStatus(o.id, e.target.value)}>
                         {TRACK_STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -235,7 +233,7 @@ export default function Admin() {
                   </tr>
                 ))}
                 {todaysOrders.length === 0 && (
-                  <tr><td colSpan={11} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No laundry orders placed today yet.</td></tr>
+                  <tr><td colSpan={9} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No laundry orders placed today yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -246,7 +244,7 @@ export default function Admin() {
           <div>
             <div className="rw-admin-panel-head">
               <div>
-                <h2 style={{ marginBottom: 4 }}>Cleaning Bookings — Today</h2>
+                <h2 style={{ marginBottom: 4 }}>Cleaning Bookings, Today</h2>
                 <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Older bookings have moved to History automatically.</p>
               </div>
               {todaysBookings.length > 0 && (
@@ -285,7 +283,7 @@ export default function Admin() {
           <div>
             <div className="rw-admin-panel-head">
               <div>
-                <h2 style={{ marginBottom: 4 }}>Shop Orders — Today</h2>
+                <h2 style={{ marginBottom: 4 }}>Shop Orders, Today</h2>
                 <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Older shop orders have moved to History automatically.</p>
               </div>
               {todaysShopOrders.length > 0 && (
@@ -326,7 +324,7 @@ export default function Admin() {
           <div>
             <h2 style={{ marginBottom: 6 }}>History</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 13.5, marginBottom: 18 }}>
-              Every laundry order, cleaning booking and shop purchase ever placed — searchable, nothing deleted.
+              Every laundry order, cleaning booking and shop purchase ever placed, searchable, nothing deleted.
             </p>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
@@ -405,7 +403,7 @@ export default function Admin() {
               <button className="rw-btn rw-btn-primary" onClick={addProduct}><Plus size={15} /> Add Product</button>
             </div>
             <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -14, marginBottom: 20 }}>
-              New stock always starts at {MIN_UNIT} units or more — the field won't accept less.
+              New stock always starts at {MIN_UNIT} units or more, the field won't accept less.
             </p>
 
             <table className="rw-table">

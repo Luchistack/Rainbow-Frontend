@@ -5,9 +5,9 @@ import { money, genRef } from "../utils/format";
 import { buildWhatsAppLink } from "../data/constants";
 
 function buildReceipt(order) {
-  const itemLines = order.items.map((i) => `  • ${i.name} × ${i.qty} — ${money(i.price * i.qty)}`).join("\n");
+  const itemLines = order.items.map((i) => `  • ${i.name} × ${i.qty}, ${money(i.price * i.qty)}`).join("\n");
   return [
-    "🧴 New Shop Order — Rainbow Wash",
+    "🧴 New Shop Order, Rainbow Wash",
     `Ref: ${order.id}`,
     itemLines,
     `Fulfilment: ${order.mode === "delivery" ? "Delivery" : "Pickup in-store"}`,
@@ -48,7 +48,7 @@ export default function CartDrawer({ open, onClose }) {
       status: "Received",
     };
     setShopOrders((os) => [order, ...os]);
-    notify(`Order placed! Ref ${order.id} — ${mode === "delivery" ? "delivery" : "pickup"} selected.`);
+    notify(`Order placed! Ref ${order.id}, ${mode === "delivery" ? "delivery" : "pickup"} selected.`);
     window.open(buildWhatsAppLink(buildReceipt(order)), "_blank");
     setCart([]);
     setFullName("");

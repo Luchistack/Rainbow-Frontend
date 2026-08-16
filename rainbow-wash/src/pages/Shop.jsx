@@ -7,7 +7,7 @@ import { useApp } from "../context/AppContext";
 import { money } from "../utils/format";
 
 const WHY_SHOP = [
-  { icon: Truck, color: "#27AAE1", title: "Delivery or Pickup", desc: "Have it delivered with your next laundry order, or grab it in store." },
+  { icon: Truck, color: "#27AAE1", title: "Delivery or Pickup", desc: "Have it delivered with your next laundry order, or grab it in-store." },
   { icon: ShieldCheck, color: "#39B54A", title: "Trusted Brands", desc: "The same products we use on your laundry, sold by the bottle." },
   { icon: Wallet, color: "#F7941D", title: "Fair Pricing", desc: "No markup games, the price you see is the price you pay." },
   { icon: RefreshCw, color: "#8E44AD", title: "Always Restocked", desc: "We track stock closely so popular items rarely run out." },

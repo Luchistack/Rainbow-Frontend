@@ -20,7 +20,7 @@ const INCLUDED = [
   "Kitchen surfaces, sink and stovetop wiped down",
   "Bathroom cleaning and sanitising",
   "Trash removal and bin liners replaced",
-  "Upholstery spot checked on request",
+  "Upholstery spot-checked on request",
 ];
 
 const BOOK_TESTIMONIALS = [
@@ -37,13 +37,13 @@ const BOOK_FAQ = [
 
 function buildReceipt(booking) {
   return [
-    "🧹 New Cleaning Booking,Rainbow Wash",
+    "🧹 New Cleaning Booking, Rainbow Wash",
     `Ref: ${booking.id}`,
     `Service: ${booking.service}`,
     `Size: ${booking.size}`,
     `Date: ${booking.date || "—"} ${booking.time || ""}`.trim(),
     `Address: ${booking.address || "—"}`,
-    `Payment: ${booking.payType === "deposit" ? "30% deposit" : "Full payment"} : ${money(booking.payable)}`,
+    `Payment: ${booking.payType === "deposit" ? "30% deposit" : "Full payment"}, ${money(booking.payable)}`,
     `Customer name: ${booking.fullName}`,
     `Customer phone: ${booking.phone}`,
     `Customer email: ${booking.email || "—"}`,
@@ -94,7 +94,7 @@ export default function BookCleaning() {
     };
     setBookings((bs) => [booking, ...bs]);
     setPlaced(booking);
-    notify(`Booking ${booking.id} confirmed — ${money(payable)} paid`);
+    notify(`Booking ${booking.id} confirmed, ${money(payable)} paid`);
     window.open(buildWhatsAppLink(buildReceipt(booking)), "_blank");
   };
 
@@ -138,7 +138,7 @@ export default function BookCleaning() {
               <label>Property / job size</label>
               <select value={size} onChange={(e) => setSize(e.target.value)}>
                 {svc.sizes.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label} — {money(s.price)}</option>
+                  <option key={s.id} value={s.id}>{s.label}, {money(s.price)}</option>
                 ))}
               </select>
             </div>
@@ -172,7 +172,7 @@ export default function BookCleaning() {
               <input type="tel" placeholder="e.g. 0803 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
             </div>
             <div className="rw-field">
-              <label><Mail size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Email (optional — for your receipt)</label>
+              <label><Mail size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Email (optional, for your receipt)</label>
               <input type="email" placeholder="e.g. you@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
           </div>

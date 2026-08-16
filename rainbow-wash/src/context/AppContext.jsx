@@ -29,10 +29,7 @@ function usePersistedState(key, initialValue) {
 const SEED_LAUNDRY_ORDERS = [
   {
     id: "LND-4821",
-    clothType: "regular",
-    weight: 4,
-    qty: 1,
-    level: "washfold",
+    items: [{ name: "Staff Wash — Wash & Dry", qty: 4, price: 2000, unit: "kg" }],
     fulfilment: "pickup",
     address: "12 Palm Ave, Maryland",
     date: "2026-08-09",
@@ -43,15 +40,12 @@ const SEED_LAUNDRY_ORDERS = [
     email: "bukola.a@example.com",
     placedAt: "2026-08-08T09:12:00.000Z",
     archived: false,
-    total: 4200,
+    total: 10500,
     status: "Washing",
   },
   {
     id: "LND-3390",
-    clothType: "bedding",
-    weight: 6,
-    qty: 1,
-    level: "washiron",
+    items: [{ name: "Self Wash — Wash & Iron", qty: 6, price: 4000, unit: "kg" }],
     fulfilment: "dropoff",
     address: "",
     date: "",
@@ -62,7 +56,7 @@ const SEED_LAUNDRY_ORDERS = [
     email: "",
     placedAt: "2026-08-07T15:40:00.000Z",
     archived: false,
-    total: 10500,
+    total: 24000,
     status: "Ready",
   },
 ];
