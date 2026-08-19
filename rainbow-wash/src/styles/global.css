@@ -7,7 +7,7 @@ body {
   color: var(--ink);
   background: var(--ice);
   line-height: 1.6;
-  font-size: 33px;
+  font-size: 16px;
   font-weight: 800;
 }
 
@@ -75,6 +75,35 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-mobile-menu a { text-align: left; background: none; border: none; padding: 11px 6px; font-weight: 700; color: var(--ink-soft); border-radius: 8px; font-size: 22px; display: block; }
 .rw-mobile-menu a.active { color: var(--blue); }
 
+@media (max-width: 640px) {
+  .rw-nav-inner {
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+
+  .rw-brand img {
+    height: 42px;
+  }
+
+  .rw-brand-main {
+    font-size: 20px;
+  }
+
+  .rw-brand-sub {
+    font-size: 9px;
+  }
+
+  .rw-navcta {
+    gap: 4px;
+  }
+
+  .rw-btn-sm {
+    padding: 7px 9px;
+    font-size: 14px;
+  }
+}
+
 @media (max-width: 880px) {
   .rw-navlinks { display: none; }
   .rw-mobile-toggle { display: flex; }
@@ -84,7 +113,17 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 /* ============================================================
    HERO — full-bleed photo slideshow, water/cloud overlay
    ============================================================ */
-.rw-hero { position: relative; overflow: hidden; min-height: 1000px; display: flex; align-items: center; background: #0c3f66; }.rw-hero-bg { position: absolute; inset: 0; z-index: 0; }
+   /* Base style for small mobile phones */
+.rw-hero { position: relative; overflow: hidden; min-height: 450px,;
+   display: flex; align-items: center; background: #0c3f66; padding : 40px 20px; 
+  }
+  /* Tablets and smaller laptops */
+  @media (min-width: 768px) { .rw-hero { min-height: 580px; padding: 50px 30px; } }
+/* Large desktops and laptops */
+  @media(min-width: 1024px) { .rw-hero { min-height: 700px; padding: 60px 40px; } }
+
+  .rw-hero-bg 
+   { position: absolute; inset: 0; z-index: 0; }
 .rw-hero-bg-layer { position: absolute; inset: 0; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.4s ease; transform: scale(1.04); }
 .rw-hero-bg-layer.show { opacity: 1; }
 .rw-hero-tint {
@@ -99,9 +138,19 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
   100% { transform: translateY(-620px) scale(1.35); opacity: 0; }
 }
 
-.rw-hero-inner { position: relative; z-index: 2; max-width: 1180px; margin: 0 auto; padding: 90px 20px 120px 20px; width: 100%; transform: translateX(-190px); }
-@media (max-width: 900px) { .rw-hero-inner { padding: 60px 18px 110px 18px; transform: translateX(-30px); } }
-
+.rw-hero-inner {
+  position: relative;
+  z-index: 2;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 90px 20px 120px;
+  width: 100%;
+}
+@media (max-width: 900px) {
+  .rw-hero-inner {
+    padding: 60px 18px 110px;
+  }
+}
 .rw-eyebrow { display: inline-flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.35); color: #eaf6fd; font-weight: 800; font-size: 18.5px; padding: 7px 14px; border-radius: 99px; margin-bottom: 22px; letter-spacing: 0.03em; text-transform: uppercase; }
 .rw-eyebrow .dot { width: 7px; height: 7px; border-radius: 99px; background: #39b54a; box-shadow: 0 0 0 3px rgba(57, 181, 74, 0.35); }
 
