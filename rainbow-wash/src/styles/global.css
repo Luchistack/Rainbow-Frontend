@@ -265,8 +265,9 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-feature-card h3 { font-size: 22.5px; margin-bottom: 8px; }
 .rw-feature-card p { font-size: 20.5px; color: var(--ink-soft); margin: 0; }
 /* FOOTER */
-.rw-footer { background: linear-gradient(180deg, var(--navy-deep), #051526); color: #cfe2f2; margin-top: 30px; }
-.rw-footer-inner { max-width: 1500px; margin: 0 auto; padding: 55px 20px 50px; display: grid; grid-template-columns: minmax(200px, 1.1fr) minmax(230px, 1.4fr) minmax(210px, 1fr) minmax(230px, 1fr); gap: 40px; }
+.rw-footer { background: linear-gradient(180deg, var(--navy-deep), #051526); color: #cfe2f2; margin-top: 30px; width: 100%; overflow-x: hidden; }
+.rw-footer-inner { max-width: 1180px; margin: 0 auto; padding: 55px 20px 50px; display: grid; grid-template-columns: repeat(4, 1.1fr); gap: 30px; }
+ /* minmax(230px, 1.4fr) minmax(210px, 1fr) minmax(230px, 1fr); */
 @media (max-width: 900px) { .rw-footer-inner { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .rw-footer-inner { grid-template-columns: 1fr; } }
 .rw-footer h4 { color: #fff; font-size: 20.5px; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 18px; font-family: var(--font-body); font-weight: 800; }
@@ -324,12 +325,12 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-overlay { position: fixed; inset: 0; background: rgba(7, 26, 47, 0.45); z-index: 99; }
 
 /* Admin */
-.rw-admin-shell { display: grid; grid-template-columns: 230px 1fr; min-height: 70vh; }
+.rw-admin-shell { display: grid; grid-template-columns: 230px 1fr; min-height: 70vh; width: 100%; overflow-x: hidden;}
 @media (max-width: 800px) { .rw-admin-shell { grid-template-columns: 1fr; } }
 .rw-admin-side { background: var(--navy); padding: 22px 14px; }
 .rw-admin-side button { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; background: none; border: none; color: #a9c3db; padding: 12px 13px; border-radius: 10px; font-weight: 700; font-size: 21px; margin-bottom: 4px; }
 .rw-admin-side button.active { background: rgba(255, 255, 255, 0.1); color: #fff; }
-.rw-admin-main { padding: 28px; background: #fff; }
+.rw-admin-main { padding: 28px; background: #fff; min-width: 0; overflow-x: auto;}
 .rw-table { width: 100%; border-collapse: collapse; font-size: 21px; }
 .rw-table th { text-align: left; color: var(--ink-soft); font-weight: 800; padding: 11px 13px; border-bottom: 2px solid var(--line); font-size: 18px; text-transform: uppercase; letter-spacing: 0.04em; }
 .rw-table td { padding: 12px 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
