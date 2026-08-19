@@ -36,7 +36,6 @@ export function openPrintSlip(order, staffUser) {
 <meta charset="utf-8" />
 <title>${order.id} — Rainbow Wash</title>
 <style>
-  /* Force color retention when printing */
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .noprint { display: none; }
@@ -44,7 +43,6 @@ export function openPrintSlip(order, staffUser) {
   * { box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; padding: 32px; max-width: 700px; margin: 0 auto; background: #fff; }
   
-  /* Rainbow stripe banner matching brand styling */
   .print-rainbow-stripe { height: 6px; width: 100%; display: flex; margin-bottom: 24px; border-radius: 4px; overflow: hidden; }
   .print-rainbow-stripe span { flex: 1; }
 
