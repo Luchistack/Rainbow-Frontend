@@ -12,10 +12,14 @@ export default function Navbar({ onCartClick }) {
   return (
     <div className="rw-nav">
       <div className="rw-nav-inner">
-        {/* Left section: Hamburger button (on mobile) + Brand logo */}
+        {/* Left side: Hamburger menu button + Logo guaranteed to sit together */}
         <div className="rw-nav-left">
-          <button className="rw-mobile-toggle rw-icon-btn" onClick={() => setOpen((o) => !o)} aria-label="Toggle Menu">
-            {open ? <X size={22} /> : <Menu size={22} />}
+          <button 
+            className="rw-mobile-toggle rw-icon-btn" 
+            onClick={() => setOpen((o) => !o)} 
+            aria-label="Toggle Menu"
+          >
+            {open ? <X size={20} /> : <Menu size={20} />}
           </button>
 
           <NavLink to="/" className="rw-brand">
@@ -27,7 +31,7 @@ export default function Navbar({ onCartClick }) {
           </NavLink>
         </div>
 
-        {/* Center section: Desktop Links */}
+        {/* Center: Desktop links */}
         <div className="rw-navlinks">
           {NAV_ITEMS.map((n) => (
             <NavLink key={n.path} to={n.path} className={({ isActive }) => (isActive ? "active" : "")} end={n.path === "/"}>
@@ -36,7 +40,7 @@ export default function Navbar({ onCartClick }) {
           ))}
         </div>
 
-        {/* Right section: Cart and Login */}
+        {/* Right side: Cart and Login */}
         <div className="rw-navcta">
           <button className="rw-icon-btn" onClick={onCartClick} aria-label="Cart">
             <ShoppingCart size={20} />
