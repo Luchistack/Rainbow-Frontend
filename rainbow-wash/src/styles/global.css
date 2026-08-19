@@ -329,7 +329,56 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-stat-card { background: var(--ice); border-radius: 14px; padding: 20px; }
 .rw-stat-card b { display: block; font-family: var(--font-display); font-size: 31px; color: var(--navy); }
 .rw-stat-card span { font-size: 18.5px; color: var(--ink-soft); font-weight: 700; }
-.rw-login-box { max-width: 380px; margin: 60px auto; background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 32px; text-align: center; }
+
+.rw-login-box {
+  background: #ffffff;
+  max-width: 460px;
+  width: 100%;
+  margin: 60px auto;
+  padding: 36px 32px;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  text-align: center;
+}
+
+.rw-login-box h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.3px;
+}
+
+.rw-login-box .rw-field {
+  margin-bottom: 18px;
+}
+
+.rw-login-box .rw-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.rw-login-box input[type="text"],
+.rw-login-box input[type="password"] {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 14px;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.rw-login-box input:focus {
+  background: #ffffff;
+  border-color: var(--blue, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  outline: none;
+}
+
 .rw-admin-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 .rw-add-product-form { background: var(--ice); border: 1px dashed var(--sky); border-radius: 14px; padding: 20px; margin-bottom: 24px; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
 @media (max-width: 900px) { .rw-add-product-form { grid-template-columns: 1fr 1fr; } }
