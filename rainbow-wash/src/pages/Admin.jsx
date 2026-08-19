@@ -117,7 +117,16 @@ export default function Admin() {
   const updateShopPayment = (id, paymentStatus) => setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentStatus } : o)));
 
   const restock = (id) => setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, stock: p.stock + RESTOCK_STEP } : p)));
-  const updateProductField = (id, field, value) => setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
+  
+  // Sync updates across both products and addonProducts so pricing reflects everywhere
+  const updateProductField = (id, field, value) => {
+    setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
+    if (field === "price" || field === "name") {
+      setAddonProducts((aps) =>
+        aps.map((ap) => (ap.id === id || ap.label === products.find(p => p.id === id)?.name ? { ...ap, [field === "name" ? "label" : field]: value } : ap))
+      );
+    }
+  };
 
   const archiveOrder = (id) => setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, archived: true } : o)));
   const archiveBooking = (id) => setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, archived: true } : b)));
@@ -135,10 +144,22 @@ export default function Admin() {
   const addProduct = () => {
     if (!newName.trim() || !newPrice) return;
     const id = "p" + Date.now();
+    const parsedPrice = Math.max(0, Number(newPrice));
+    const parsedStock = Math.max(MIN_UNIT, Number(newStock) || MIN_UNIT);
+    const trimmedName = newName.trim();
+
+    // Add to products list
     setProducts((ps) => [
       ...ps,
-      { id, name: newName.trim(), price: Math.max(0, Number(newPrice)), stock: Math.max(MIN_UNIT, Number(newStock) || MIN_UNIT), status: newStatus },
+      { id, name: trimmedName, price: parsedPrice, stock: parsedStock, status: newStatus },
     ]);
+
+    // Automatically add to addonProducts so it shows up under Pricing
+    setAddonProducts((aps) => [
+      ...aps,
+      { id, label: trimmedName, price: parsedPrice, group: "Shop & Retail Items" }
+    ]);
+
     setNewName("");
     setNewPrice("");
     setNewStock(MIN_UNIT);
@@ -150,7 +171,11 @@ export default function Admin() {
   const updateStaffWash = (id, price) => setStaffWashRates((rs) => rs.map((r) => (r.id === id ? { ...r, price: Number(price) } : r)));
   const updateDryClean = (id, field, value) => setDryCleanItems((its) => its.map((i) => (i.id === id ? { ...i, [field]: Number(value) } : i)));
   const updateShoeCare = (id, field, value) => setShoeCareItems((its) => its.map((i) => (i.id === id ? { ...i, [field]: Number(value) } : i)));
-  const updateAddon = (id, price) => setAddonProducts((ps) => ps.map((p) => (p.id === id ? { ...p, price: Number(price) } : p)));
+  const updateAddon = (id, price) => {
+    const numPrice = Number(price);
+    setAddonProducts((ps) => ps.map((p) => (p.id === id ? { ...p, price: numPrice } : p)));
+    setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, price: numPrice } : p)));
+  };
   const updateCleaningPrice = (serviceId, sizeId, price) =>
     setCleaningServices((css) =>
       css.map((s) => (s.id === serviceId ? { ...s, sizes: s.sizes.map((sz) => (sz.id === sizeId ? { ...sz, price: Number(price) } : sz)) } : s))
@@ -254,7 +279,7 @@ export default function Admin() {
             </div>
             <p style={{ color: "var(--ink-soft)", fontSize: 14.5 }}>
               These numbers reset automatically at midnight, or instantly if you click "Start New Day" above.
-              Nothing is ever deleted, everything moves into <b>History</b>, searchable by day, week, month or year.
+              Nothing is ever delayed, everything moves into <b>History</b>, searchable by day, week, month or year.
             </p>
           </div>
         )}
@@ -480,7 +505,7 @@ export default function Admin() {
                       <td>
                         <input
                           type="text"
-                          style={{ width: "100%", padding: "6px 8px" }}
+                          style={{ width: "100%", padding: "6px 8px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 4, color: "var(--ink)" }}
                           value={p.name}
                           onChange={(e) => updateProductField(p.id, "name", e.target.value)}
                         />
@@ -489,7 +514,7 @@ export default function Admin() {
                         <input
                           type="number"
                           step="50"
-                          style={{ width: 90, padding: "6px 8px" }}
+                          style={{ width: 90, padding: "6px 8px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 4, color: "var(--ink)" }}
                           value={p.price}
                           onChange={(e) => updateProductField(p.id, "price", Number(e.target.value))}
                         />
