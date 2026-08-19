@@ -16,6 +16,7 @@ const WHY_SHOP = [
 const SHOP_TESTIMONIALS = [
   { name: "Ifeoma K.", role: "Repeat shop customer", quote: "I add detergent to my laundry order every month, arrives together, one delivery fee." },
   { name: "Samuel T.", role: "Shop customer", quote: "Good prices and the stain remover actually works on my kids' school uniforms." },
+  { name: "Luchi F.", role: "Shop customer", quote: "Consistent cleaning power" },
 ];
 
 const SHOP_FAQ = [

@@ -1,14 +1,13 @@
 import { useState } from "react";
 import {
   CheckCircle2, Minus, Plus, Truck, CreditCard, Phone, Mail, User,
-  Shirt, Users, Sparkles, Package, ShoppingBag, Trash2,
+  Shirt, Users, Sparkles, Package, ShoppingBag, Trash2, Landmark, Copy,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import FAQ from "../components/FAQ";
 import {
-  SELF_WASH_RATES, STAFF_WASH_RATES, DRY_CLEAN_ITEMS, SHOE_CARE_ITEMS, ADDON_PRODUCTS,
-  SELF_WASH_DISCOUNT_KG, SELF_WASH_DISCOUNT_RATE,
-  DELIVERY_FEE, DELIVERY_COVERAGE_NOTE, buildWhatsAppLink,
+  ADDON_GROUPS, SELF_WASH_DISCOUNT_KG, SELF_WASH_DISCOUNT_RATE,
+  DELIVERY_FEE, DELIVERY_COVERAGE_NOTE, BANK_DETAILS, buildWhatsAppLink,
 } from "../data/constants";
 import { money, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
@@ -35,14 +34,6 @@ const CARE_TIPS = [
   "Note fabric-specific instructions in the address/notes field.",
 ];
 
-const ORDER_FAQ = [
-  { q: "What's the difference between Self Wash and Staff Wash?", a: "Self Wash means you use our machines yourself at a lower rate. Staff Wash means our team washes, dries and/or irons it for you, priced a little higher to cover the labour." },
-  { q: "Do I get a discount on Self Wash?", a: `Yes, any Self Wash line of ${SELF_WASH_DISCOUNT_KG}kg or more automatically gets ${SELF_WASH_DISCOUNT_RATE * 100}% off.` },
-  { q: "What payment methods are accepted?", a: "Paystack, Flutterwave, or direct bank transfer, choose at checkout." },
-  { q: "Is there a delivery fee?", a: `A flat ${money(DELIVERY_FEE)} fee applies for pickup and delivery combined. ${DELIVERY_COVERAGE_NOTE} Drop-off in-store has no extra fee.` },
-  { q: "Why do you ask for my phone number?", a: "So our team can call you the moment your order is ready or if anything needs confirming." },
-];
-
 function buildReceipt(order) {
   const itemLines = order.items.map((i) => `  • ${i.name} × ${i.qty}${i.unit ? i.unit : ""}, ${money(i.price * i.qty)}`).join("\n");
   const lines = [
@@ -56,6 +47,7 @@ function buildReceipt(order) {
     lines.push(`Preferred: ${order.date || "—"} ${order.time || ""}`.trim());
   }
   lines.push(`Payment method: ${order.payment}`);
+  if (order.payment === "bank" && order.transferNote) lines.push(`Transfer note: ${order.transferNote}`);
   lines.push(`Total: ${money(order.total)}`);
   lines.push(`Customer name: ${order.fullName}`);
   lines.push(`Customer phone: ${order.phone}`);
@@ -64,20 +56,18 @@ function buildReceipt(order) {
 }
 
 export default function OrderLaundry() {
-  const { setLaundryOrders, notify } = useApp();
+  const { setLaundryOrders, notify, selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts } = useApp();
 
   const [category, setCategory] = useState("selfwash");
   const [items, setItems] = useState([]);
 
-  // Self/Staff wash builder state
-  const [washRateId, setWashRateId] = useState(SELF_WASH_RATES[0].id);
+  const [washRateId, setWashRateId] = useState(selfWashRates[0].id);
   const [washWeight, setWashWeight] = useState(3);
 
-  // Dry clean / shoe care builder state
-  const [dcItemId, setDcItemId] = useState(DRY_CLEAN_ITEMS[0].id);
+  const [dcItemId, setDcItemId] = useState(dryCleanItems[0].id);
   const [dcType, setDcType] = useState("regular");
   const [dcQty, setDcQty] = useState(1);
-  const [scItemId, setScItemId] = useState(SHOE_CARE_ITEMS[0].id);
+  const [scItemId, setScItemId] = useState(shoeCareItems[0].id);
   const [scType, setScType] = useState("regular");
   const [scQty, setScQty] = useState(1);
 
@@ -86,6 +76,8 @@ export default function OrderLaundry() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [payment, setPayment] = useState("paystack");
+  const [transferNote, setTransferNote] = useState("");
+  const [transferSent, setTransferSent] = useState(false);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -104,7 +96,7 @@ export default function OrderLaundry() {
   const updateItemQty = (id, delta) => setItems((its) => its.map((i) => (i.id === id ? { ...i, qty: Math.max(1, i.qty + delta) } : i)));
 
   const addWashLine = (isSelf) => {
-    const rate = (isSelf ? SELF_WASH_RATES : STAFF_WASH_RATES).find((r) => r.id === washRateId);
+    const rate = (isSelf ? selfWashRates : staffWashRates).find((r) => r.id === washRateId);
     let unitPrice = rate.price;
     let discounted = false;
     if (isSelf && washWeight >= SELF_WASH_DISCOUNT_KG) {
@@ -116,14 +108,14 @@ export default function OrderLaundry() {
   };
 
   const addDryCleanLine = () => {
-    const item = DRY_CLEAN_ITEMS.find((i) => i.id === dcItemId);
+    const item = dryCleanItems.find((i) => i.id === dcItemId);
     const price = dcType === "deep" ? item.deep : item.regular;
     const name = `${item.label} (${dcType === "deep" ? "Deep Clean" : "Regular"})`;
     addItem(name, dcQty, price, "");
   };
 
   const addShoeCareLine = () => {
-    const item = SHOE_CARE_ITEMS.find((i) => i.id === scItemId);
+    const item = shoeCareItems.find((i) => i.id === scItemId);
     const price = scType === "deep" ? item.deep : scType === "repair" ? item.repair : item.regular;
     const typeLabel = scType === "deep" ? "Deep Clean" : scType === "repair" ? "Minor Repairs" : "Regular";
     const name = `${item.label} (${typeLabel})`;
@@ -133,6 +125,11 @@ export default function OrderLaundry() {
   const subtotal = items.reduce((s, i) => s + i.qty * i.price, 0);
   const deliveryFee = fulfilment === "pickup" ? DELIVERY_FEE : 0;
   const total = subtotal + deliveryFee;
+
+  const copyAccount = () => {
+    navigator.clipboard?.writeText(BANK_DETAILS.accountNumber);
+    notify("Account number copied");
+  };
 
   const submit = () => {
     if (items.length === 0) {
@@ -150,7 +147,9 @@ export default function OrderLaundry() {
     const order = {
       id: genRef("LND"),
       items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, unit: i.unit })),
-      fulfilment, address, date, time, payment, fullName, phone, email,
+      fulfilment, address, date, time, payment, transferNote,
+      paymentStatus: payment === "bank" && transferSent ? "Sent" : "Pending",
+      fullName, phone, email,
       placedAt: new Date().toISOString(),
       archived: false,
       total, status: "Received",
@@ -170,7 +169,7 @@ export default function OrderLaundry() {
           <p style={{ color: "var(--ink-soft)", margin: "10px 0 4px" }}>Your reference number</p>
           <div className="mono" style={{ fontSize: 23, fontWeight: 700, color: "var(--navy)" }}>{placed.id}</div>
           <p style={{ color: "var(--ink-soft)", marginTop: 14 }}>
-            A receipt has opened in WhatsApp to send to our team. We'll call {placed.phone} when it's ready —
+            A receipt has opened in WhatsApp to send to our team. We'll call {placed.phone} when it's ready,
             you can also follow status on the Track Order page.
           </p>
           <button
@@ -183,6 +182,8 @@ export default function OrderLaundry() {
               setPhone("");
               setEmail("");
               setAddress("");
+              setTransferNote("");
+              setTransferSent(false);
             }}
           >
             Place another order
@@ -212,7 +213,7 @@ export default function OrderLaundry() {
                   <div className="rw-field">
                     <label>{category === "selfwash" ? "Self Wash" : "Staff Wash"} service</label>
                     <select value={washRateId} onChange={(e) => setWashRateId(e.target.value)}>
-                      {(category === "selfwash" ? SELF_WASH_RATES : STAFF_WASH_RATES).map((r) => (
+                      {(category === "selfwash" ? selfWashRates : staffWashRates).map((r) => (
                         <option key={r.id} value={r.id}>{r.label}, {money(r.price)}/kg</option>
                       ))}
                     </select>
@@ -241,7 +242,7 @@ export default function OrderLaundry() {
                   <div className="rw-field">
                     <label>Item</label>
                     <select value={dcItemId} onChange={(e) => setDcItemId(e.target.value)}>
-                      {DRY_CLEAN_ITEMS.map((i) => (
+                      {dryCleanItems.map((i) => (
                         <option key={i.id} value={i.id}>{i.label}, Regular {money(i.regular)} / Deep {money(i.deep)}</option>
                       ))}
                     </select>
@@ -272,7 +273,7 @@ export default function OrderLaundry() {
                   <div className="rw-field">
                     <label>Item</label>
                     <select value={scItemId} onChange={(e) => setScItemId(e.target.value)}>
-                      {SHOE_CARE_ITEMS.map((i) => (
+                      {shoeCareItems.map((i) => (
                         <option key={i.id} value={i.id}>{i.label}, Regular {money(i.regular)} / Deep {money(i.deep)} / Repair {money(i.repair)}</option>
                       ))}
                     </select>
@@ -300,16 +301,23 @@ export default function OrderLaundry() {
               )}
 
               {category === "extras" && (
-                <div className="rw-grid-2">
-                  {ADDON_PRODUCTS.map((p) => (
-                    <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{p.label}</div>
-                        <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>{money(p.price)}</div>
+                <div>
+                  {ADDON_GROUPS.map((group) => (
+                    <div key={group} style={{ marginBottom: 18 }}>
+                      <h4 style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-soft)", marginBottom: 8 }}>{group}</h4>
+                      <div className="rw-grid-2">
+                        {addonProducts.filter((p) => p.group === group).map((p) => (
+                          <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: 14 }}>{p.label}</div>
+                              <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>{money(p.price)}</div>
+                            </div>
+                            <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => addItem(p.label, 1, p.price, "")}>
+                              <Plus size={13} />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => addItem(p.label, 1, p.price, "")}>
-                        <Plus size={13} />
-                      </button>
                     </div>
                   ))}
                 </div>
@@ -350,11 +358,39 @@ export default function OrderLaundry() {
               <div className="rw-field">
                 <label>Payment method</label>
                 <div className="rw-pill-group">
-                  <button className={`rw-pill ${payment === "paystack" ? "active" : ""}`} onClick={() => setPayment("paystack")}>Paystack</button>
-                  <button className={`rw-pill ${payment === "flutterwave" ? "active" : ""}`} onClick={() => setPayment("flutterwave")}>Flutterwave</button>
+                  {/* <button className={`rw-pill ${payment === "paystack" ? "active" : ""}`} onClick={() => setPayment("paystack")}>Paystack</button>
+                  <button className={`rw-pill ${payment === "flutterwave" ? "active" : ""}`} onClick={() => setPayment("flutterwave")}>Flutterwave</button> */}
                   <button className={`rw-pill ${payment === "bank" ? "active" : ""}`} onClick={() => setPayment("bank")}>Bank Transfer</button>
                 </div>
               </div>
+
+              {payment === "bank" && (
+                <div className="rw-summary" style={{ marginBottom: 16 }}>
+                  <h4 style={{ fontSize: 13.5, display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                    <Landmark size={15} /> Transfer to
+                  </h4>
+                  <div className="rw-summary-row"><span>Bank</span><span style={{ fontWeight: 700 }}>{BANK_DETAILS.bankName}</span></div>
+                  <div className="rw-summary-row">
+                    <span>Account Number</span>
+                    <span style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                      {BANK_DETAILS.accountNumber}
+                      <button className="rw-icon-btn" onClick={copyAccount} title="Copy account number"><Copy size={13} /></button>
+                    </span>
+                  </div>
+                  <div className="rw-summary-row"><span>Account Name</span><span style={{ fontWeight: 700, textAlign: "right" }}>{BANK_DETAILS.accountName}</span></div>
+                  <div className="rw-field" style={{ marginTop: 12, marginBottom: 10 }}>
+                    <label style={{ fontSize: 12.5 }}>Transfer note (optional)</label>
+                    <textarea rows={2} placeholder="e.g. Sent from GTBank, ref 123456" value={transferNote} onChange={(e) => setTransferNote(e.target.value)} />
+                  </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
+                    <input type="checkbox" checked={transferSent} onChange={(e) => setTransferSent(e.target.checked)} style={{ width: "auto" }} />
+                    I've already made this transfer
+                  </label>
+                  <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 8 }}>
+                    Your order stays marked "Payment Pending" until our team confirms the transfer, we'll message you once it's confirmed.
+                  </p>
+                </div>
+              )}
 
               <div className="rw-field">
                 <label><User size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Full name</label>
@@ -427,7 +463,18 @@ export default function OrderLaundry() {
         </div>
       </div>
 
-      <FAQ kicker="Questions" title="Order Laundry FAQ" items={ORDER_FAQ} />
+      <FAQ
+        kicker="Questions"
+        title="Order Laundry FAQ"
+        items={[
+          { q: "What's the difference between Self Wash and Staff Wash?", a: "Self Wash means you use our machines yourself at a lower rate. Staff Wash means our team washes, dries and/or irons it for you, priced a little higher to cover the labour." },
+          { q: "Do I get a discount on Self Wash?", a: `Yes, any Self Wash line of ${SELF_WASH_DISCOUNT_KG}kg or more automatically gets ${SELF_WASH_DISCOUNT_RATE * 100}% off.` },
+          { q: "How fast is delivery?", a: "Same day or next day delivery, depending on when your items are dropped off and the service selected." },
+          { q: "What payment methods are accepted?", a: "Paystack, Flutterwave, or direct bank transfer, choose at checkout." },
+          { q: "Is there a delivery fee?", a: `A flat ${money(DELIVERY_FEE)} fee applies for pickup and delivery combined. ${DELIVERY_COVERAGE_NOTE} Drop-off in-store has no extra fee.` },
+          { q: "Why do you ask for my phone number?", a: "So our team can call you the moment your order is ready or if anything needs confirming." },
+        ]}
+      />
     </div>
   );
 }

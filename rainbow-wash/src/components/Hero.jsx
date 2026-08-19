@@ -4,21 +4,21 @@ import { ArrowRight } from "lucide-react";
 import slide1 from "../assets/hero-slide-1.jpg";
 import slide2 from "../assets/hero-slide-2.jpg";
 import slide3 from "../assets/hero-slide-3.jpg";
-import slide4 from "../assets/hero-slide-4.jpg";
+// import slide4 from "../assets/hero-slide-4.jpg";
 import { DELIVERY_FEE } from "../data/constants";
 import { money } from "../utils/format";
 
-const SLIDES = [slide1, slide2, slide3, slide4];
+const SLIDES = [slide1, slide2, slide3];
 
 const BUBBLES = [
-  { left: "6%", size: 14, dur: 12, delay: 0 },
-  { left: "16%", size: 8, dur: 9, delay: 2 },
-  { left: "27%", size: 20, dur: 15, delay: 1 },
-  { left: "40%", size: 10, dur: 10, delay: 4 },
-  { left: "55%", size: 16, dur: 13, delay: 0.5 },
-  { left: "68%", size: 9, dur: 8, delay: 3 },
-  { left: "80%", size: 22, dur: 16, delay: 2.5 },
-  { left: "90%", size: 12, dur: 11, delay: 1.5 },
+  { left: "6%", size: 20, dur: 12, delay: 0 },
+  { left: "16%", size: 10, dur: 9, delay: 2 },
+  { left: "27%", size: 30, dur: 15, delay: 1 },
+  { left: "40%", size: 15, dur: 10, delay: 4 },
+  { left: "55%", size: 26, dur: 13, delay: 0.5 },
+  { left: "68%", size: 18, dur: 8, delay: 3 },
+  { left: "80%", size: 40, dur: 16, delay: 2.5 },
+  { left: "90%", size: 32, dur: 11, delay: 1.5 },
 ];
 
 export default function Hero() {
@@ -32,9 +32,9 @@ export default function Hero() {
   return (
     <div className="rw-hero">
       <div className="rw-hero-bg">
-        {SLIDES.map((src, idx) => (
-          <div key={idx} className={`rw-hero-bg-layer ${idx === i ? "show" : ""}`} style={{ backgroundImage: `url(${src})` }} />
-        ))}
+    {SLIDES.map((src, idx) => (
+  <div key={idx} className={`rw-hero-bg-layer ${idx === i ? "show" : ""}`} style={{ backgroundImage: `url(${src})` }} />
+))}
         <div className="rw-hero-tint" />
       </div>
 
@@ -45,10 +45,10 @@ export default function Hero() {
       </div>
 
       <div className="rw-hero-inner">
-        <div className="rw-eyebrow"><span className="dot" />Now open in Mende Maryland · Opened Aug 8th</div>
+        <div className="rw-eyebrow"><span className="dot" />Now open in Mende Maryland</div>
         <h1>Coloring your world with <em>cleanliness.</em></h1>
         <p className="lead">
-          Wash, iron, dry clean and deep clean, pickup and delivery included. Rainbow Wash Laundry And Dry Cleaning Services takes the laundry
+          Wash, iron and deep clean, pickup and delivery included. Rainbow Wash Laundry and Cleaning Services takes the laundry
           pile and the dusty upholstery off your to-do list.
         </p>
         <div className="rw-hero-actions">

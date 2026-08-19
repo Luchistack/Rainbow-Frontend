@@ -44,6 +44,7 @@ export default function CartDrawer({ open, onClose }) {
       items: cart.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
       mode, fullName, phone, total,
       placedAt: new Date().toISOString(),
+      paymentStatus: "Pending",
       archived: false,
       status: "Received",
     };

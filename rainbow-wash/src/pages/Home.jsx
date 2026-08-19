@@ -47,7 +47,7 @@ export default function Home() {
         <div className="rw-section-head">
           <div className="rw-kicker">What we do</div>
           <h2>Everything your laundry needs, in one place</h2>
-          <p>From an everyday wash to full home deep cleaning, pick a service and we'll handle the rest.</p>
+          <p>From an everyday wash to full-home deep cleaning, pick a service and we'll handle the rest.</p>
         </div>
         <div className="rw-grid-3">
           {SERVICES_PREVIEW.map((s) => (

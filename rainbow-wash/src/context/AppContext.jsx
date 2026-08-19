@@ -1,5 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { PRODUCTS } from "../data/constants";
+import {
+  PRODUCTS, SELF_WASH_RATES, STAFF_WASH_RATES, DRY_CLEAN_ITEMS, SHOE_CARE_ITEMS,
+  ADDON_PRODUCTS, CLEANING_SERVICES,
+} from "../data/constants";
 
 const AppContext = createContext(null);
 
@@ -35,6 +38,8 @@ const SEED_LAUNDRY_ORDERS = [
     date: "2026-08-09",
     time: "10:00",
     payment: "paystack",
+    paymentStatus: "Confirmed",
+    transferNote: "",
     fullName: "Bukola Adebayo",
     phone: "0803 000 1122",
     email: "bukola.a@example.com",
@@ -51,6 +56,8 @@ const SEED_LAUNDRY_ORDERS = [
     date: "",
     time: "",
     payment: "bank",
+    paymentStatus: "Pending",
+    transferNote: "",
     fullName: "Tunde Bakare",
     phone: "0705 555 9081",
     email: "",
@@ -77,6 +84,7 @@ const SEED_BOOKINGS = [
     price: 20000,
     payType: "deposit",
     payable: 6000,
+    paymentStatus: "Confirmed",
     status: "Confirmed",
   },
 ];
@@ -84,10 +92,26 @@ const SEED_BOOKINGS = [
 export function AppProvider({ children }) {
   const [cart, setCart] = useState([]);
   const [toast, setToast] = useState("");
+
+  // Shop inventory (existing)
   const [products, setProducts] = usePersistedState("products", PRODUCTS);
+
+  // Service pricing — editable by Manager/Admin in the dashboard's Pricing
+  // tab. Every customer-facing page reads these live from context instead
+  // of the static constants, so a price edit reflects everywhere instantly.
+  const [selfWashRates, setSelfWashRates] = usePersistedState("selfWashRates", SELF_WASH_RATES);
+  const [staffWashRates, setStaffWashRates] = usePersistedState("staffWashRates", STAFF_WASH_RATES);
+  const [dryCleanItems, setDryCleanItems] = usePersistedState("dryCleanItems", DRY_CLEAN_ITEMS);
+  const [shoeCareItems, setShoeCareItems] = usePersistedState("shoeCareItems", SHOE_CARE_ITEMS);
+  const [addonProducts, setAddonProducts] = usePersistedState("addonProducts", ADDON_PRODUCTS);
+  const [cleaningServices, setCleaningServices] = usePersistedState("cleaningServices", CLEANING_SERVICES);
+
   const [laundryOrders, setLaundryOrders] = usePersistedState("laundryOrders", SEED_LAUNDRY_ORDERS);
   const [bookings, setBookings] = usePersistedState("bookings", SEED_BOOKINGS);
   const [shopOrders, setShopOrders] = usePersistedState("shopOrders", []);
+
+  // Currently logged-in dashboard user: { name, role } or null when logged out.
+  const [currentUser, setCurrentUser] = usePersistedState("currentUser", null);
 
   const notify = (msg) => {
     setToast(msg);
@@ -100,9 +124,16 @@ export function AppProvider({ children }) {
     cart, setCart, cartCount,
     toast, notify,
     products, setProducts,
+    selfWashRates, setSelfWashRates,
+    staffWashRates, setStaffWashRates,
+    dryCleanItems, setDryCleanItems,
+    shoeCareItems, setShoeCareItems,
+    addonProducts, setAddonProducts,
+    cleaningServices, setCleaningServices,
     laundryOrders, setLaundryOrders,
     bookings, setBookings,
     shopOrders, setShopOrders,
+    currentUser, setCurrentUser,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

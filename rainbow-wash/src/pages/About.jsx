@@ -85,12 +85,12 @@ export default function About() {
         kicker="Take a look inside"
         title="A space that feels like home"
         text="Step inside and it doesn't feel like a laundromat, it feels like somewhere you'd actually want to sit and wait. It's clean in the way a home is clean, not just a business: organised, cared for, and welcoming from the moment you walk in."
-        points={[
-          "Spacious wash floor with room to sit and wait comfortably",
-          "Bright, naturally lit interior, not a cramped back room setup",
-          "Neatly organised self wash counters and drop off point",
-          "Friendly staff on hand to help, not just process orders",
-        ]}
+        // points={[
+        //   "Spacious wash floor with room to sit and wait comfortably",
+        //   "Bright, naturally lit interior, not a cramped back room setup",
+        //   "Neatly organised self wash counters and drop off point",
+        //   "Friendly staff on hand to help, not just process orders",
+        // ]}
       />
 
       <FeatureGrid kicker="What we stand for" title="Our values" items={VALUES} />

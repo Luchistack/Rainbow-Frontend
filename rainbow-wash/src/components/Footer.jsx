@@ -8,7 +8,7 @@ export default function Footer() {
       <div className="rw-footer-inner">
         <div className="rw-footer-brand">
           <img src={logo} alt="Rainbow Wash" />
-          <p>Rainbow Wash Laundry and Cleaning Services, coloring your world with cleanliness.</p>
+          <p>{BUSINESS_INFO.name}, coloring your world with cleanliness.</p>
           <div className="rw-footer-social">
             <a href="#" aria-label="TikTok"><Sparkles size={16} /></a>
             <a href="#" aria-label="Instagram"><Instagram size={16} /></a>
@@ -55,7 +55,7 @@ export default function Footer() {
         </div>
       </div>
       <div className="rw-footer-bottom">
-        © {new Date().getFullYear()} Rainbow Wash Laundry and Cleaning Services. All rights reserved.
+        © {new Date().getFullYear()} {BUSINESS_INFO.name}. All rights reserved.
       </div>
     </footer>
   );

@@ -3,15 +3,17 @@ export const RAINBOW = ["#EF4136", "#F7941D", "#FFCE33", "#39B54A", "#27AAE1", "
 export const NAV_ITEMS = [
   { path: "/", label: "Home" },
   { path: "/about", label: "About" },
-  { path: "/services", label: "Our Services" },
+  { path: "/services", label: "Services" },
   { path: "/shop", label: "Shop" },
-  { path: "/book-cleaning", label: "Book Cleaning" },
-  { path: "/order-laundry", label: "Order Laundry" },
+  { path: "/book-cleaning", label: "Cleaning" },
+  { path: "/order-laundry", label: "Laundry" },
   { path: "/track-order", label: "Track Order" },
 ];
 
 /* ============================================================
-   LAUNDRY PRICING, from the shop's official price list
+   LAUNDRY PRICING — seed defaults, editable by Manager/Admin
+   in the dashboard's Pricing tab. Live values are stored in
+   AppContext (and localStorage) once the app first loads.
    ============================================================ */
 
 // Self Wash: customer washes it themselves using our machines.
@@ -49,33 +51,39 @@ export const SHOE_CARE_ITEMS = [
   { id: "sc-leathershoes", label: "Leather Shoes", regular: 4000, deep: 5000, repair: 2000 },
 ];
 
-// Add-on products customers can add to a laundry order.
+// Add-on products, grouped so the order builder shows them in sensible sections
+// (liquids together, starch together, nylon/bags together, small extras together).
+export const ADDON_GROUPS = ["Detergents & Softeners", "Starch", "Stain Removers & Extras", "Nylon & Bags"];
 export const ADDON_PRODUCTS = [
-  { id: "ad-softener-small", label: "Fabric Softener (small)", price: 2500 },
-  { id: "ad-softener-big", label: "Fabric Softener (big)", price: 25000 },
-  { id: "ad-detergent-small", label: "Liquid Detergent (small)", price: 2500 },
-  { id: "ad-detergent-big", label: "Liquid Detergent (big)", price: 25000 },
-  { id: "ad-starch-niagara", label: "Starch, Original Lavender Niagara (per cloth)", price: 500 },
-  { id: "ad-starch-faultless", label: "Starch, Heavy Lavender Faultless (per cloth)", price: 500 },
-  { id: "ad-starch-braxton", label: "Starch, Heavy Amindon Lourd Braxton5 (per cloth)", price: 500 },
-  { id: "ad-stain-minor", label: "Minor Stain Remover (per cloth)", price: 500 },
-  { id: "ad-stain-regular", label: "Regular Stain Remover (per cloth)", price: 1000 },
-  { id: "ad-stain-tuff", label: "Tuff Stain Remover (per cloth)", price: 2000 },
-  { id: "ad-scentbeads", label: "Scent Beads (per cap)", price: 500 },
-  { id: "ad-tiepod", label: "Tiepod", price: 1000 },
-  { id: "ad-soklin-smart", label: "So Klin Smart", price: 500 },
-  { id: "ad-soklin-detergent", label: "So Klin Detergent (small)", price: 1000 },
-  { id: "ad-viva-small", label: "Viva Detergent (small)", price: 700 },
-  { id: "ad-viva-big", label: "Viva Detergent (big)", price: 3000 },
-  { id: "ad-shoebag", label: "Shoe Bag", price: 1000 },
-  { id: "ad-suitebag", label: "Suite Bag", price: 4000 },
-  { id: "ad-nylon-xl", label: "Nylon XL", price: 1500 },
-  { id: "ad-nylon-l", label: "Nylon L", price: 1000 },
-  { id: "ad-nylon-m", label: "Nylon M", price: 500 },
-  { id: "ad-nylon-s", label: "Nylon S", price: 300 },
-  { id: "ad-bag", label: "Bag", price: 5500 },
+  { id: "ad-softener-small", label: "Fabric Softener (small)", price: 2500, group: "Detergents & Softeners" },
+  { id: "ad-softener-big", label: "Fabric Softener (big)", price: 25000, group: "Detergents & Softeners" },
+  { id: "ad-detergent-small", label: "Liquid Detergent (small)", price: 2500, group: "Detergents & Softeners" },
+  { id: "ad-detergent-big", label: "Liquid Detergent (big)", price: 25000, group: "Detergents & Softeners" },
+  { id: "ad-soklin-smart", label: "So Klin Smart", price: 500, group: "Detergents & Softeners" },
+  { id: "ad-soklin-detergent", label: "So Klin Detergent (small)", price: 1000, group: "Detergents & Softeners" },
+  { id: "ad-viva-small", label: "Viva Detergent (small)", price: 700, group: "Detergents & Softeners" },
+  { id: "ad-viva-big", label: "Viva Detergent (big)", price: 3000, group: "Detergents & Softeners" },
+  { id: "ad-starch-niagara", label: "Starch, Original Lavender Niagara (per cloth)", price: 500, group: "Starch" },
+  { id: "ad-starch-faultless", label: "Starch, Heavy Lavender Faultless (per cloth)", price: 500, group: "Starch" },
+  { id: "ad-starch-braxton", label: "Starch, Heavy Amindon Lourd Braxton5 (per cloth)", price: 500, group: "Starch" },
+  { id: "ad-stain-minor", label: "Minor Stain Remover (per cloth)", price: 500, group: "Stain Removers & Extras" },
+  { id: "ad-stain-regular", label: "Regular Stain Remover (per cloth)", price: 1000, group: "Stain Removers & Extras" },
+  { id: "ad-stain-tuff", label: "Tuff Stain Remover (per cloth)", price: 2000, group: "Stain Removers & Extras" },
+  { id: "ad-scentbeads", label: "Scent Beads (per cap)", price: 500, group: "Stain Removers & Extras" },
+  { id: "ad-tiepod", label: "Tiepod", price: 1000, group: "Stain Removers & Extras" },
+  { id: "ad-shoebag", label: "Shoe Bag", price: 1000, group: "Nylon & Bags" },
+  { id: "ad-suitebag", label: "Suite Bag", price: 4000, group: "Nylon & Bags" },
+  { id: "ad-nylon-xl", label: "Nylon XL", price: 1500, group: "Nylon & Bags" },
+  { id: "ad-nylon-l", label: "Nylon L", price: 1000, group: "Nylon & Bags" },
+  { id: "ad-nylon-m", label: "Nylon M", price: 500, group: "Nylon & Bags" },
+  { id: "ad-nylon-s", label: "Nylon S", price: 300, group: "Nylon & Bags" },
+  { id: "ad-bag", label: "Bag", price: 5500, group: "Nylon & Bags" },
 ];
 
+// Home/Office/Deep Clean/Upholstery — internal reference prices only.
+// These are NEVER shown to customers on Book Cleaning or Services; the
+// customer-facing copy always says "price confirmed via WhatsApp or call."
+// Staff/Admin can see and edit these in the dashboard's Pricing tab.
 export const CLEANING_SERVICES = [
   {
     id: "home",
@@ -115,6 +123,13 @@ export const CLEANING_SERVICES = [
   },
 ];
 
+// Laundry subscription plans — customers subscribe via WhatsApp for now.
+export const SUBSCRIPTION_PLANS = [
+  { id: "regular", name: "Regular", price: 50000, duration: "2 weeks", covers: "Regular clothes only" },
+  { id: "exclusive", name: "Exclusive", price: 100000, duration: "2 weeks", covers: "Duvets and regular clothes" },
+  { id: "premium", name: "Premium", price: 200000, duration: "1 month", covers: "Everything, all laundry types" },
+];
+
 export const PRODUCTS = [
   { id: "p1", name: "Liquid Detergent 2L", price: 3500, stock: 24, status: "Active" },
   { id: "p2", name: "Fabric Softener 1L", price: 2200, stock: 6, status: "Active" },
@@ -127,9 +142,10 @@ export const PRODUCTS = [
 ];
 
 export const TRACK_STAGES = ["Received", "Washing", "Completed", "Delivered"];
+export const PAYMENT_STATUSES = ["Pending", "Sent", "Confirmed"];
 
 // Order/booking receipts send straight to this WhatsApp number as a copy for staff.
-export const WHATSAPP_NUMBER = "234813692900"; // ⚠️ double-check this — it's 12 digits, one short of the usual 13 (234 + 10-digit local number)
+export const WHATSAPP_NUMBER = "2348136920900"; // ⚠️ double-check this — it's 12 digits, one short of the usual 13 (234 + 10-digit local number)
 export const buildWhatsAppLink = (message) => `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 
 export const DELIVERY_FEE = 2500;
@@ -138,7 +154,14 @@ export const DELIVERY_COVERAGE_NOTE = "Currently covers the Maryland area only, 
 export const MAPS_ADDRESS = "Rainbow Wash, 10 Prince Bode Oluwo Street, Mende, opposite Mende Town Hall, Maryland, Lagos";
 export const MAPS_LINK = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(MAPS_ADDRESS)}`;
 
+export const BANK_DETAILS = {
+  accountNumber: "56789635343",
+  bankName: "Providus Bank",
+  accountName: "Rainbow Wash Laundry and Cleaning Services",
+};
+
 export const BUSINESS_INFO = {
+  name: "Rainbow Wash Laundry And Cleaning Services",
   address: "10 Prince Bode Oluwo Street, Mende, opposite Mende Town Hall, Maryland, Lagos.",
   phones: ["0812 140 6293", "0916 589 6730"],
   email: "rainbowwashlaundrycleaningserv@gmail.com",
@@ -151,3 +174,8 @@ export const BUSINESS_INFO = {
     { days: "Sunday", time: "12PM – 6PM" },
   ],
 };
+
+// Dashboard roles. Staff: today's orders/bookings/shop + read-only History,
+// no pricing, no inventory, no overview, no reports. Manager: everything
+// Admin has except Overview and Reports. Admin: everything, full edit rights.
+export const ROLES = ["Staff", "Manager", "Admin"];
