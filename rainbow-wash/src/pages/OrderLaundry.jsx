@@ -398,7 +398,7 @@ export default function OrderLaundry() {
               </div>
               <div className="rw-field">
                 <label><Phone size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Phone number</label>
-                <input type="tel" placeholder="e.g. 0803 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                <input type="tel" placeholder="e.g. 0803 1111 1111" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
               <div className="rw-field">
                 <label><Mail size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Email (optional)</label>
