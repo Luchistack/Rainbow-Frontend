@@ -40,7 +40,7 @@ const ABOUT_FAQ = [
 export default function About() {
   return (
     <div>
-      <PageHeader title="Rainbow Wash Laundry And Dry Cleaning Services" subtitle="Coloring your world with cleanliness." />
+      <PageHeader title="Rainbow Wash Laundry And Cleaning Services" subtitle="Coloring your world with cleanliness." />
 
       <div className="rw-section">
         <div className="rw-grid-2" style={{ alignItems: "center" }}>
