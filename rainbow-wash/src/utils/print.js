@@ -36,26 +36,49 @@ export function openPrintSlip(order, staffUser) {
 <meta charset="utf-8" />
 <title>${order.id} — Rainbow Wash</title>
 <style>
+  /* Force color retention when printing */
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .noprint { display: none; }
+  }
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; padding: 32px; max-width: 700px; margin: 0 auto; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1a1a1a; padding: 32px; max-width: 700px; margin: 0 auto; background: #fff; }
+  
+  /* Rainbow stripe banner matching brand styling */
+  .print-rainbow-stripe { height: 6px; width: 100%; display: flex; margin-bottom: 24px; border-radius: 4px; overflow: hidden; }
+  .print-rainbow-stripe span { flex: 1; }
+
   .head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-  .biz { font-weight: 700; font-size: 15px; }
+  .biz { font-weight: 800; font-size: 18px; color: #0c3f66; }
   .contact { text-align: right; font-size: 12px; color: #555; line-height: 1.6; }
-  h1 { font-size: 22px; margin: 18px 0 4px; }
-  .meta { display: flex; justify-content: space-between; margin: 18px 0; font-size: 13px; }
+  
+  h1 { font-size: 24px; margin: 18px 0 4px; color: #0c3f66; }
+  
+  .meta { display: flex; justify-content: space-between; margin: 18px 0; font-size: 13px; background: #f4f8fb; padding: 14px; border-radius: 8px; border-left: 4px solid #27aae1; }
   .meta div { line-height: 1.8; }
-  .meta b { color: #444; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #666; border-bottom: 2px solid #ddd; padding: 8px 6px; }
-  td { padding: 9px 6px; border-bottom: 1px solid #eee; font-size: 13.5px; }
-  .totals { margin-top: 16px; width: 260px; margin-left: auto; font-size: 13.5px; }
+  .meta b { color: #0c3f66; }
+  
+  table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #0c3f66; border-bottom: 2px solid #27aae1; padding: 10px 8px; background: #eaf4fb; }
+  td { padding: 10px 8px; border-bottom: 1px solid #eee; font-size: 13.5px; word-wrap: break-word; overflow-wrap: break-word; }
+  
+  .totals { margin-top: 16px; width: 280px; margin-left: auto; font-size: 13.5px; background: #f4f8fb; padding: 10px 14px; border-radius: 8px; }
   .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
-  .totals .grand { font-weight: 700; font-size: 16px; border-top: 2px solid #222; padding-top: 8px; margin-top: 6px; }
+  .totals .grand { font-weight: 800; font-size: 16px; border-top: 2px solid #0c3f66; padding-top: 8px; margin-top: 6px; color: #0c3f66; }
+  
   .foot { margin-top: 40px; padding-top: 14px; border-top: 1px solid #ddd; font-size: 11.5px; color: #777; display: flex; justify-content: space-between; }
-  @media print { .noprint { display: none; } }
 </style>
 </head>
 <body>
+  <div class="print-rainbow-stripe">
+    <span style="background: #ef4136;"></span>
+    <span style="background: #f7941d;"></span>
+    <span style="background: #ffce33;"></span>
+    <span style="background: #39b54a;"></span>
+    <span style="background: #27aae1;"></span>
+    <span style="background: #8e44ad;"></span>
+  </div>
+
   <div class="head">
     <div class="biz">${BUSINESS_INFO.name}</div>
     <div class="contact">
@@ -64,11 +87,11 @@ export function openPrintSlip(order, staffUser) {
     </div>
   </div>
 
-  <h1>Receipt / Slip</h1>
+  <h1>Service Receipt / Slip</h1>
 
   <div class="meta">
     <div>
-      <b>Bill To</b><br/>
+      <b>Bill To:</b><br/>
       ${order.fullName || "Customer"}<br/>
       ${order.phone || ""}
     </div>
