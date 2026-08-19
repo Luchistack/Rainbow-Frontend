@@ -286,15 +286,15 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-stock-low { background: #fdece9; color: #c9382f; }
 .rw-price { font-family: var(--font-display); font-weight: 800; color: var(--navy); font-size: 25px; }
 
-/* Cart Drawer Layout (Reordered so checkout fields appear at the top) */
+/* Cart Drawer Layout (Inputs and Pay Button brought up to the middle/top section) */
 .rw-cart-drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 390px; max-width: 92vw; background: #fff; box-shadow: -10px 0 40px rgba(0, 0, 0, 0.2); z-index: 100; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.25s ease; }
 .rw-cart-drawer.open { transform: translateX(0); }
-.rw-cart-head { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; order: 1; }
-.rw-cart-checkout-top { padding: 16px 20px; border-bottom: 1px solid var(--line); background: #f8fbfe; order: 2; }
-.rw-cart-body { flex: 1; overflow-y: auto; padding: 16px 20px; order: 3; }
+.rw-cart-head { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+.rw-cart-checkout-top { padding: 16px 20px; border-bottom: 1px solid var(--line); background: #f8fbfe; max-height: 50vh; overflow-y: auto; flex-shrink: 0; }
+.rw-cart-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
 .rw-cart-item { display: flex; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--line); align-items: center; }
 .rw-cart-item .rw-product-thumb { width: 54px; height: 54px; margin: 0; flex-shrink: 0; }
-.rw-cart-foot { padding: 18px 20px; border-top: 1px solid var(--line); order: 4; }
+.rw-cart-foot { display: none; }
 .rw-overlay { position: fixed; inset: 0; background: rgba(7, 26, 47, 0.45); z-index: 99; }
 
 /* Admin */
@@ -305,10 +305,15 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-admin-side button.active { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .rw-admin-main { padding: 28px; background: #fff; min-width: 0; overflow-x: auto; }
 
-/* Adjusted Table Layout to prevent column squeezing on mobile */
+/* Adjusted Table Layout & Fixed Item Words Line Wrap */
 .rw-table { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 720px; }
 .rw-table th { text-align: left; color: var(--ink-soft); font-weight: 800; padding: 11px 13px; border-bottom: 2px solid var(--line); font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; }
 .rw-table td { padding: 12px 13px; border-bottom: 1px solid var(--line); vertical-align: middle; word-wrap: break-word; overflow-wrap: break-word; }
+
+/* Force items column (4th column) to align words horizontally without stacking vertically */
+.rw-table td:nth-child(4), .rw-table th:nth-child(4) {
+  white-space: nowrap;
+}
 
 .rw-status-select { padding: 7px 9px; border-radius: 8px; font-size: 19px; font-weight: 800; border: 1.5px solid var(--line); }
 .rw-stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }

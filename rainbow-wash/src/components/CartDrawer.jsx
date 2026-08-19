@@ -10,6 +10,8 @@ function buildReceipt(order) {
     "🧴 New Shop Order, Rainbow Wash",
     `Ref: ${order.id}`,
     itemLines,
+    `Subtotal: ${money(order.subtotal)}`,
+    `VAT (7.5%): ${money(order.tax)}`,
     `Fulfilment: ${order.mode === "delivery" ? "Delivery" : "Pickup in-store"}`,
     `Total: ${money(order.total)}`,
     `Customer name: ${order.fullName}`,
@@ -22,7 +24,10 @@ export default function CartDrawer({ open, onClose }) {
   const [mode, setMode] = useState("delivery");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  
+  const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const tax = subtotal * 0.075;
+  const total = subtotal + tax;
 
   const updateQty = (id, delta) => {
     setCart((c) => c.map((i) => (i.id === id ? { ...i, qty: Math.max(1, i.qty + delta) } : i)));
@@ -42,7 +47,7 @@ export default function CartDrawer({ open, onClose }) {
     const order = {
       id: genRef("SHOP"),
       items: cart.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
-      mode, fullName, phone, total,
+      mode, fullName, phone, subtotal, tax, total,
       placedAt: new Date().toISOString(),
       paymentStatus: "Pending",
       archived: false,
@@ -66,6 +71,33 @@ export default function CartDrawer({ open, onClose }) {
           <button className="rw-icon-btn" onClick={onClose}><X size={20} /></button>
         </div>
 
+        {/* Checkout Inputs & Tax Summary Brought Up to the Middle/Top */}
+        <div className="rw-cart-checkout-top">
+          <div className="rw-pill-group" style={{ marginBottom: 14 }}>
+            <button className={`rw-pill ${mode === "delivery" ? "active" : ""}`} onClick={() => setMode("delivery")}>Delivery</button>
+            <button className={`rw-pill ${mode === "pickup" ? "active" : ""}`} onClick={() => setMode("pickup")}>Pickup</button>
+          </div>
+          <div className="rw-field" style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12.5 }}><User size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Full name</label>
+            <input placeholder="e.g. Ada Obi" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </div>
+          <div className="rw-field" style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 12.5 }}>Phone number</label>
+            <input type="tel" placeholder="e.g. 0803 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+          {cart.length > 0 && (
+            <>
+              <div className="rw-summary-row" style={{ fontSize: 14 }}><span>Subtotal</span><span>{money(subtotal)}</span></div>
+              <div className="rw-summary-row" style={{ fontSize: 14 }}><span>VAT (7.5%)</span><span>{money(tax)}</span></div>
+              <div className="rw-summary-row total"><span>Total</span><span>{money(total)}</span></div>
+              <button className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={checkout}>
+                <CreditCard size={16} /> Pay & Place Order
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Scrollable Cart Items Section */}
         <div className="rw-cart-body">
           {cart.length === 0 && (
             <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>Your cart is empty. Add some products from the shop.</p>
@@ -88,27 +120,6 @@ export default function CartDrawer({ open, onClose }) {
             </div>
           ))}
         </div>
-
-        {cart.length > 0 && (
-          <div className="rw-cart-foot">
-            <div className="rw-pill-group" style={{ marginBottom: 14 }}>
-              <button className={`rw-pill ${mode === "delivery" ? "active" : ""}`} onClick={() => setMode("delivery")}>Delivery</button>
-              <button className={`rw-pill ${mode === "pickup" ? "active" : ""}`} onClick={() => setMode("pickup")}>Pickup</button>
-            </div>
-            <div className="rw-field" style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12.5 }}><User size={12} style={{ verticalAlign: -2, marginRight: 4 }} />Full name</label>
-              <input placeholder="e.g. Ada Obi" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            </div>
-            <div className="rw-field" style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12.5 }}>Phone number</label>
-              <input type="tel" placeholder="e.g. 0803 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
-            </div>
-            <div className="rw-summary-row total"><span>Total</span><span>{money(total)}</span></div>
-            <button className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={checkout}>
-              <CreditCard size={16} /> Pay & Place Order
-            </button>
-          </div>
-        )}
       </div>
     </>
   );

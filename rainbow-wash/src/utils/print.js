@@ -7,7 +7,7 @@ function rowsForOrder(order) {
       .map(
         (i) => `
       <tr>
-        <td>${i.name}</td>
+        <td style="white-space: nowrap;">${i.name}</td>
         <td style="text-align:center">${i.qty}${i.unit || ""}</td>
         <td style="text-align:right">${money(i.price)}</td>
         <td style="text-align:right">${money(i.price * i.qty)}</td>
@@ -17,15 +17,18 @@ function rowsForOrder(order) {
   }
   return `
       <tr>
-        <td>${order.service || "Cleaning Service"} — ${order.size || ""}</td>
+        <td style="white-space: nowrap;">${order.service || "Cleaning Service"} — ${order.size || ""}</td>
         <td style="text-align:center">1</td>
-        <td style="text-align:right">${money(order.price || order.total || 0)}</td>
-        <td style="text-align:right">${money(order.price || order.total || 0)}</td>
+        <td style="text-align:right">${money(order.price || order.subtotal || 0)}</td>
+        <td style="text-align:right">${money(order.price || order.subtotal || 0)}</td>
       </tr>`;
 }
 
 export function openPrintSlip(order, staffUser) {
-  const total = order.total ?? order.price ?? 0;
+  const subtotal = order.subtotal ?? order.price ?? (order.total ? order.total / 1.075 : 0);
+  const tax = order.tax ?? (subtotal * 0.075);
+  const total = order.total ?? (subtotal + tax);
+  
   const placedDate = order.placedAt ? new Date(order.placedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "—";
   const printedAt = new Date().toLocaleString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -110,6 +113,8 @@ export function openPrintSlip(order, staffUser) {
   </table>
 
   <div class="totals">
+    <div><span>Subtotal</span><span>${money(subtotal)}</span></div>
+    <div><span>VAT (7.5%)</span><span>${money(tax)}</span></div>
     <div class="grand"><span>Total</span><span>${money(total)}</span></div>
   </div>
 
