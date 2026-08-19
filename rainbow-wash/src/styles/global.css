@@ -1,6 +1,15 @@
-*, *::before,  *::after { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
 
-html, body, #root { margin: 0; padding: 0; width: 100%; overflow-x: hidden; }
+/* Flex layout setup to keep footer pushed to the bottom on short pages */
+html, body, #root { 
+  margin: 0; 
+  padding: 0; 
+  width: 100%; 
+  overflow-x: hidden; 
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
 
 body {
   font-family: var(--font-body);
@@ -9,6 +18,11 @@ body {
   line-height: 1.6;
   font-size: 16px;
   font-weight: 800;
+}
+
+/* Allow main application content to fill vertical space */
+#root > div:first-of-type, main {
+  flex: 1;
 }
 
 h1, h2, h3, h4 {
@@ -236,8 +250,8 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-feature-card h3 { font-size: 22.5px; margin-bottom: 8px; }
 .rw-feature-card p { font-size: 20.5px; color: var(--ink-soft); margin: 0; }
 
-/* FOOTER */
-.rw-footer { background: linear-gradient(180deg, var(--navy-deep), #051526); color: #cfe2f2; margin-top: 30px; width: 100%; overflow-x: hidden; }
+/* FOOTER - Anchored to bottom on short pages via margin-top: auto */
+.rw-footer { background: linear-gradient(180deg, var(--navy-deep), #051526); color: #cfe2f2; margin-top: auto; width: 100%; overflow-x: hidden; }
 .rw-footer-inner { max-width: 1180px; margin: 0 auto; padding: 55px 20px 50px; display: grid; grid-template-columns: repeat(4, 1.1fr); gap: 30px; }
 @media (max-width: 900px) { .rw-footer-inner { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .rw-footer-inner { grid-template-columns: 1fr; } }
@@ -258,9 +272,12 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 640px) { .rw-form-grid { grid-template-columns: 1fr; } }
 .rw-field { margin-bottom: 15px; }
-.rw-pill-group { display: flex; gap: 9px; flex-wrap: wrap; }
-.rw-pill { border: 1.5px solid var(--line); background: #fff; padding: 10px 16px; border-radius: 99px; font-size: 20.5px; font-weight: 700; color: var(--ink-soft); }
+
+/* Moderate sizing for role pills/buttons */
+.rw-pill-group { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.rw-pill { border: 1.5px solid var(--line); background: #fff; padding: 6px 14px; border-radius: 99px; font-size: 14px; font-weight: 700; color: var(--ink-soft); cursor: pointer; }
 .rw-pill.active { border-color: var(--blue); background: #eaf4fb; color: var(--blue); }
+
 .rw-stepper { display: flex; align-items: center; gap: 14px; }
 .rw-stepper button { width: 36px; height: 36px; border-radius: 9px; border: 1.5px solid var(--line); background: #fff; display: flex; align-items: center; justify-content: center; }
 .rw-summary { background: var(--ice); border: 1px dashed var(--sky); border-radius: 14px; padding: 20px; }
@@ -334,7 +351,7 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
   background: #ffffff;
   max-width: 460px;
   width: 100%;
-  margin: 60px auto;
+  margin: 40px auto;
   padding: 36px 32px;
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.04);
