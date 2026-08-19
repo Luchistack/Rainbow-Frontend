@@ -27,7 +27,7 @@ export default function Navbar({ onCartClick }) {
             <img src={logo} alt="Rainbow Wash logo" />
             <span className="rw-brand-text">
               <span className="rw-brand-main"><span>R</span>ainbow Wash</span>
-              <span className="rw-brand-sub">Laundry And Cleaning</span>
+              <span className="rw-brand-sub">Laundry And Cleaning Services</span>
             </span>
           </NavLink>
         </div>
