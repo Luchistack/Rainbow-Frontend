@@ -477,8 +477,23 @@ export default function Admin() {
                   const low = p.stock <= 5;
                   return (
                     <tr key={p.id}>
-                      <td>{p.name}</td>
-                      <td>{money(p.price)}</td>
+                      <td>
+                        <input
+                          type="text"
+                          style={{ width: "100%", padding: "6px 8px" }}
+                          value={p.name}
+                          onChange={(e) => updateProductField(p.id, "name", e.target.value)}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="number"
+                          step="50"
+                          style={{ width: 90, padding: "6px 8px" }}
+                          value={p.price}
+                          onChange={(e) => updateProductField(p.id, "price", Number(e.target.value))}
+                        />
+                      </td>
                       <td><input type="number" min={MIN_UNIT} style={{ width: 74, padding: "6px 8px" }} value={p.stock} onChange={(e) => updateProductField(p.id, "stock", Math.max(MIN_UNIT, Number(e.target.value) || MIN_UNIT))} /></td>
                       <td>
                         <select className="rw-status-select" value={p.status || "Active"} onChange={(e) => updateProductField(p.id, "status", e.target.value)}>
