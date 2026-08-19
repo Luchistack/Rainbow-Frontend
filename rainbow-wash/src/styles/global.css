@@ -74,7 +74,15 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 
 /* NAVBAR & MOBILE TOGGLE */
 .rw-nav { position: sticky; top: 0; z-index: 50; background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
-.rw-nav-inner { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+.rw-nav-inner { 
+  max-width: 1180px; 
+  margin: 0 auto; 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+  gap: 8px; 
+  padding: 12px 10px; /* Adjusted padding to prevent right-edge clipping */
+}
 
 .rw-nav-left { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
@@ -89,7 +97,35 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-navlinks a { background: none; border: none; padding: 8px 12px; border-radius: 9px; font-weight: 800; font-size: 18px; color: var(--ink-soft); display: inline-block; white-space: nowrap; }
 .rw-navlinks a.active { color: var(--blue); background: #eaf4fb; }
 .rw-navlinks a:hover { color: var(--blue); }
-.rw-navcta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.rw-navcta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* Dropdown styles for compact desktop navigation */
+.rw-dropdown-container { position: relative; display: inline-block; }
+.rw-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  min-width: 200px;
+  z-index: 100;
+}
+.rw-dropdown-menu a {
+  font-size: 16px !important;
+  padding: 8px 12px !important;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.rw-dropdown-menu a:hover {
+  background: #eaf4fb;
+  color: var(--blue);
+}
 
 /* Mobile Toggle Hamburger Button */
 .rw-mobile-toggle { 
@@ -109,9 +145,15 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 
 @media (max-width: 480px) {
   .rw-brand-sub { display: none; }
-  .rw-brand-main { font-size: 18px; }
-  .rw-brand img { height: 32px; }
-  .rw-nav-inner { padding: 10px 12px; gap: 8px; }
+  .rw-brand-main { font-size: 16px; }
+  .rw-brand img { height: 28px; }
+  .rw-nav-inner { padding: 8px 8px; gap: 6px; }
+  
+  /* Pulls the login button slightly inward by shrinking its internal mobile padding */
+  .rw-navcta .rw-btn-sm {
+    padding: 6px 10px;
+    font-size: 16px;
+  }
 }
 
 @media (max-width: 1024px) {
