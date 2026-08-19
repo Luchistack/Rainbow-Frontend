@@ -75,19 +75,23 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 /* NAVBAR */
 .rw-nav { position: sticky; top: 0; z-index: 50; background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 .rw-nav-inner { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 20px; }
+
+.rw-nav-left { display: flex; align-items: center; gap: 12px; }
+
 .rw-brand { display: flex; align-items: center; gap: 10px; background: none; border: none; padding: 0; }
 .rw-brand img { height: 44px; width: auto; }
 .rw-brand-text { display: flex; flex-direction: column; line-height: 1.15; gap: 1px; }
 .rw-brand-main { font-family: var(--font-display); font-weight: 800; font-size: 24px; color: var(--navy); letter-spacing: 0.2px; white-space: nowrap; }
 .rw-brand-main span { background: linear-gradient(90deg, #ef4136, #f7941d, #ffce33, #39b54a, #27aae1, #8e44ad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .rw-brand-sub { font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-soft); white-space: nowrap; }
+
 .rw-navlinks { display: flex; gap: 4px; align-items: center; }
 .rw-navlinks a { background: none; border: none; padding: 8px 12px; border-radius: 9px; font-weight: 800; font-size: 18px; color: var(--ink-soft); display: inline-block; white-space: nowrap; }
 .rw-navlinks a.active { color: var(--blue); background: #eaf4fb; }
 .rw-navlinks a:hover { color: var(--blue); }
 .rw-navcta { display: flex; align-items: center; gap: 10px; }
 
-/* Fixed Mobile Toggle / Hamburger Button Visibility */
+/* Fixed Mobile Toggle / Hamburger Button Visibility & Positioning */
 .rw-mobile-toggle { 
   display: none; 
   background: none; 
@@ -115,7 +119,7 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
     font-size: 18px;
   }
   .rw-brand-sub {
-    font-size: 9px;
+    display: none; /* Hide subtitle on very small screens to save space */
   }
   .rw-navcta {
     gap: 4px;
@@ -128,7 +132,7 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 
 @media (max-width: 1024px) {
   .rw-navlinks { display: none; }
-  .rw-mobile-toggle { display: flex; } /* Forces the hamburger menu button to show on mobile & tablets */
+  .rw-mobile-toggle { display: flex !important; } /* Forces the hamburger menu button to show on mobile & tablets */
   .rw-mobile-menu.open { display: flex; }
 }
 
@@ -261,7 +265,7 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-feature-card h3 { font-size: 22.5px; margin-bottom: 8px; }
 .rw-feature-card p { font-size: 20.5px; color: var(--ink-soft); margin: 0; }
 
-/* FOOTER - Responsive mobile layout fix so content doesn't break out */
+/* FOOTER */
 .rw-footer { background: linear-gradient(180deg, var(--navy-deep), #051526); color: #cfe2f2; margin-top: auto; width: 100%; overflow-x: hidden; }
 .rw-footer-inner { max-width: 1180px; margin: 0 auto; padding: 45px 20px 40px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
 
@@ -290,7 +294,6 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 @media (max-width: 640px) { .rw-form-grid { grid-template-columns: 1fr; } }
 .rw-field { margin-bottom: 15px; }
 
-/* Moderate sizing for role pills/buttons */
 .rw-pill-group { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .rw-pill { border: 1.5px solid var(--line); background: #fff; padding: 6px 14px; border-radius: 99px; font-size: 14px; font-weight: 700; color: var(--ink-soft); cursor: pointer; }
 .rw-pill.active { border-color: var(--blue); background: #eaf4fb; color: var(--blue); }
@@ -339,12 +342,10 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-admin-side button.active { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .rw-admin-main { padding: 28px; background: #fff; min-width: 0; overflow-x: auto; }
 
-/* Adjusted Table Layout & Item Horizontal Flow */
 .rw-table { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 720px; }
 .rw-table th { text-align: left; color: var(--ink-soft); font-weight: 800; padding: 11px 13px; border-bottom: 2px solid var(--line); font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; }
 .rw-table td { padding: 12px 13px; border-bottom: 1px solid var(--line); vertical-align: middle; word-wrap: break-word; overflow-wrap: break-word; }
 
-/* Enhanced Status Selects and Inputs inside Admin Tables for clear visibility */
 .rw-status-select { 
   padding: 8px 12px; 
   border-radius: 8px; 
@@ -406,7 +407,6 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
   transition: all 0.2s ease;
 }
 
-/* Updated Placeholder Sizing for cross-browser support */
 .rw-login-box input::-webkit-input-placeholder {
   font-size: 13px;
   color: #94a3b8;

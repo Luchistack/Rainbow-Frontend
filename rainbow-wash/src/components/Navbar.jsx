@@ -12,14 +12,22 @@ export default function Navbar({ onCartClick }) {
   return (
     <div className="rw-nav">
       <div className="rw-nav-inner">
-        <NavLink to="/" className="rw-brand">
-          <img src={logo} alt="Rainbow Wash logo" />
-          <span className="rw-brand-text">
-            <span className="rw-brand-main"><span>R</span>ainbow Wash</span>
-            <span className="rw-brand-sub">Laundry And Cleaning Services</span>
-          </span>
-        </NavLink>
+        {/* Left section: Hamburger button (on mobile) + Brand logo */}
+        <div className="rw-nav-left">
+          <button className="rw-mobile-toggle rw-icon-btn" onClick={() => setOpen((o) => !o)} aria-label="Toggle Menu">
+            {open ? <X size={22} /> : <Menu size={22} />}
+          </button>
 
+          <NavLink to="/" className="rw-brand">
+            <img src={logo} alt="Rainbow Wash logo" />
+            <span className="rw-brand-text">
+              <span className="rw-brand-main"><span>R</span>ainbow Wash</span>
+              <span className="rw-brand-sub">Laundry And Cleaning Services</span>
+            </span>
+          </NavLink>
+        </div>
+
+        {/* Center section: Desktop Links */}
         <div className="rw-navlinks">
           {NAV_ITEMS.map((n) => (
             <NavLink key={n.path} to={n.path} className={({ isActive }) => (isActive ? "active" : "")} end={n.path === "/"}>
@@ -28,6 +36,7 @@ export default function Navbar({ onCartClick }) {
           ))}
         </div>
 
+        {/* Right section: Cart and Login */}
         <div className="rw-navcta">
           <button className="rw-icon-btn" onClick={onCartClick} aria-label="Cart">
             <ShoppingCart size={20} />
@@ -36,12 +45,10 @@ export default function Navbar({ onCartClick }) {
           <NavLink to="/admin" className="rw-btn rw-btn-ghost rw-btn-sm">
             <Lock size={14} /> Login
           </NavLink>
-          <button className="rw-mobile-toggle rw-icon-btn" onClick={() => setOpen((o) => !o)}>
-            {open ? <X size={22} /> : <Menu size={22} />}
-          </button>
         </div>
       </div>
 
+      {/* Mobile Dropdown Menu Drawer */}
       <div className={`rw-mobile-menu ${open ? "open" : ""}`}>
         {NAV_ITEMS.map((n) => (
           <NavLink key={n.path} to={n.path} onClick={() => setOpen(false)} className={({ isActive }) => (isActive ? "active" : "")} end={n.path === "/"}>
