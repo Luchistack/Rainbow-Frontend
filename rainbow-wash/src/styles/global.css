@@ -1,11 +1,15 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 /* Flex layout setup to keep footer pushed to the bottom on short pages */
-html, body, #root { 
+html, body{ 
+  height: 100%;
   margin: 0; 
   padding: 0; 
   width: 100%; 
   overflow-x: hidden; 
+
+}
+#root{
   min-height: 100%;
   display: flex;
   flex-direction: column;
@@ -23,6 +27,8 @@ body {
 /* Allow main application content to fill vertical space */
 #root > div:first-of-type, main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 h1, h2, h3, h4 {
