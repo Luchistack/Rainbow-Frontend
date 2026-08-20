@@ -7,6 +7,8 @@ import FAQ from "../components/FAQ";
 import { buildWhatsAppLink, BANK_DETAILS } from "../data/constants";
 import { money, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
+import { createBooking } from "../api/api";
+
 
 const BOOKING_STEPS = [
   { title: "Pick a service", desc: "Home, office, deep clean, or upholstery, choose what fits the job." },
@@ -37,6 +39,35 @@ const BOOK_FAQ = [
   { q: "Why do you ask for my phone number?", a: "So our team can call to confirm access, price and let you know when they're on the way." },
 ];
 
+// Fallback cleaning options in case API/Context hasn't fetched them yet
+const FALLBACK_SERVICES = [
+  {
+    id: "home",
+    label: "Home Cleaning",
+    sizes: [
+      { id: "1bed", label: "1 - 2 Bedrooms", price: 15000 },
+      { id: "3bed", label: "3 - 4 Bedrooms", price: 25000 },
+      { id: "mansion", label: "5+ Bedrooms / Duplex", price: 40000 },
+    ]
+  },
+  {
+    id: "office",
+    label: "Office Cleaning",
+    sizes: [
+      { id: "small", label: "Small Office / Workspace", price: 20000 },
+      { id: "large", label: "Large Office Suite", price: 45000 },
+    ]
+  },
+  {
+    id: "deep",
+    label: "Deep Clean",
+    sizes: [
+      { id: "standard", label: "Standard Deep Clean", price: 35000 },
+      { id: "heavy", label: "Heavy Duty / Post-Construction", price: 60000 },
+    ]
+  }
+];
+
 function buildReceipt(booking) {
   const lines = [
     "🧹 New Cleaning Booking, Rainbow Wash",
@@ -58,9 +89,10 @@ function buildReceipt(booking) {
 export default function BookCleaning() {
   const { setBookings, notify, cleaningServices } = useApp();
 
-  const [service, setService] = useState(cleaningServices[0].id);
-  const svc = cleaningServices.find((s) => s.id === service);
-  const [size, setSize] = useState(svc.sizes[0].id);
+  const servicesList = (cleaningServices && cleaningServices.length > 0) ? cleaningServices : FALLBACK_SERVICES;
+  const [service, setService] = useState(servicesList[0]?.id);
+  const svc = servicesList.find((s) => s.id === service) || servicesList[0];
+  const [size, setSize] = useState(svc?.sizes?.[0]?.id);
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [address, setAddress] = useState("");
@@ -72,12 +104,13 @@ export default function BookCleaning() {
   const [placed, setPlaced] = useState(null);
 
   useEffect(() => {
-    setSize(svc.sizes[0].id);
-  }, [service]);
+    if (svc?.sizes?.[0]?.id) {
+      setSize(svc.sizes[0].id);
+    }
+  }, [service, svc]);
 
-  const sizeObj = svc.sizes.find((s) => s.id === size) || svc.sizes[0];
-  // Internal reference figures only, used for the dashboard, never shown to the customer here.
-  const price = sizeObj.price;
+  const sizeObj = svc?.sizes?.find((s) => s.id === size) || svc?.sizes?.[0];
+  const price = sizeObj?.price || 0;
   const deposit = Math.round(price * 0.3);
   const payable = payType === "deposit" ? deposit : price;
 
@@ -86,7 +119,7 @@ export default function BookCleaning() {
     notify("Account number copied");
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!fullName.trim()) {
       notify("Please add your full name");
       return;
@@ -98,7 +131,7 @@ export default function BookCleaning() {
     const booking = {
       id: genRef("CLN"),
       service: svc.label,
-      size: sizeObj.label,
+      size: sizeObj?.label,
       date, time, address, fullName, phone, email, price, payType, payable,
       transferNote,
       paymentStatus: "Pending",
@@ -106,6 +139,13 @@ export default function BookCleaning() {
       archived: false,
       status: "Pending Quote",
     };
+
+    try {
+      await createBooking(booking);
+    } catch (error) {
+      console.error("Failed to sync booking to backend:", error);
+    }
+
     setBookings((bs) => [booking, ...bs]);
     setPlaced(booking);
     notify(`Booking ${booking.id} requested, we'll confirm your price on WhatsApp`);
@@ -141,9 +181,9 @@ export default function BookCleaning() {
             <div className="rw-field">
               <label>Service type</label>
               <div className="rw-pill-group">
-                {cleaningServices.map((s) => (
-                  <button key={s.id} className={`rw-pill ${service === s.id ? "active" : ""}`} onClick={() => setService(s.id)}>
-                    {s.label}
+                {servicesList.map((s) => (
+                  <button key={s?.id} className={`rw-pill ${service === s?.id ? "active" : ""}`} onClick={() => setService(s?.id)}>
+                    {s?.label}
                   </button>
                 ))}
               </div>
@@ -151,8 +191,8 @@ export default function BookCleaning() {
             <div className="rw-field">
               <label>Property / job size</label>
               <select value={size} onChange={(e) => setSize(e.target.value)}>
-                {svc.sizes.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
+                {svc?.sizes?.map((s) => (
+                  <option key={s?.id} value={s?.id}>{s?.label}</option>
                 ))}
               </select>
             </div>
@@ -213,8 +253,8 @@ export default function BookCleaning() {
 
           <div className="rw-card rw-summary" style={{ position: "sticky", top: 90 }}>
             <h3 style={{ marginBottom: 14 }}>Booking summary</h3>
-            <div className="rw-summary-row"><span>Service</span><span>{svc.label}</span></div>
-            <div className="rw-summary-row"><span>Size</span><span>{sizeObj.label}</span></div>
+            <div className="rw-summary-row"><span>Service</span><span>{svc?.label}</span></div>
+            <div className="rw-summary-row"><span>Size</span><span>{sizeObj?.label}</span></div>
             <div className="rw-summary-row"><span>Payment split</span><span>{payType === "deposit" ? "30% / 70%" : "Full"}</span></div>
             <div style={{ background: "var(--ice)", borderRadius: 12, padding: 14, marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
               <MessageCircle size={18} color="var(--blue)" style={{ flexShrink: 0, marginTop: 2 }} />

@@ -3,6 +3,7 @@ import {
   PRODUCTS, SELF_WASH_RATES, STAFF_WASH_RATES, DRY_CLEAN_ITEMS, SHOE_CARE_ITEMS,
   ADDON_PRODUCTS, CLEANING_SERVICES,
 } from "../data/constants";
+import { fetchCleaningServices } from "../api/api";
 
 const AppContext = createContext(null);
 
@@ -89,6 +90,11 @@ const SEED_BOOKINGS = [
   },
 ];
 
+const DEFAULT_TEAM_ACCOUNTS = [
+  { name: "Default Manager", role: "Manager", password: "ManagerPass123" },
+  { name: "Default Staff", role: "Staff", password: "StaffPass123" },
+];
+
 export function AppProvider({ children }) {
   const [cart, setCart] = useState([]);
   const [toast, setToast] = useState("");
@@ -113,6 +119,24 @@ export function AppProvider({ children }) {
   // Currently logged-in dashboard user: { name, role } or null when logged out.
   const [currentUser, setCurrentUser] = usePersistedState("currentUser", null);
 
+  // Team accounts state persisted across sessions
+  const [teamAccounts, setTeamAccounts] = usePersistedState("teamAccounts", DEFAULT_TEAM_ACCOUNTS);
+
+  // Fetch live cleaning services from backend on mount
+  useEffect(() => {
+    const loadBackendData = async () => {
+      try {
+        const data = await fetchCleaningServices();
+        if (data) {
+          setCleaningServices(data);
+        }
+      } catch (error) {
+        // Fallback gracefully to local storage / constants if backend is offline
+      }
+    };
+    loadBackendData();
+  }, []);
+
   const notify = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(""), 3200);
@@ -134,6 +158,7 @@ export function AppProvider({ children }) {
     bookings, setBookings,
     shopOrders, setShopOrders,
     currentUser, setCurrentUser,
+    teamAccounts, setTeamAccounts,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

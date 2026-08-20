@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
   Lock, LayoutDashboard, Truck, Calendar, Package, Plus, ShoppingBag, History, Search,
-  Archive, Shirt, RefreshCw, DollarSign, BarChart3, Printer, LogOut, User,
+  Archive, Shirt, RefreshCw, DollarSign, BarChart3, Printer, LogOut, User, Eye, EyeOff,
 } from "lucide-react";
-import { TRACK_STAGES, PAYMENT_STATUSES, ADDON_GROUPS, ROLES } from "../data/constants";
+import { TRACK_STAGES, PAYMENT_STATUSES, ROLES } from "../data/constants";
 import { money, formatPlacedAt, isToday, matchesRange } from "../utils/format";
 import { useApp } from "../context/AppContext";
 import { openPrintSlip } from "../utils/print";
@@ -25,13 +25,17 @@ export default function Admin() {
     products, setProducts,
     selfWashRates, setSelfWashRates, staffWashRates, setStaffWashRates,
     dryCleanItems, setDryCleanItems, shoeCareItems, setShoeCareItems,
-    addonProducts, setAddonProducts, cleaningServices, setCleaningServices,
+    addonProducts, setAddonProducts,
     currentUser, setCurrentUser,
+    teamAccounts, setTeamAccounts,
   } = useApp();
 
   const [loginName, setLoginName] = useState("");
   const [loginRole, setLoginRole] = useState("Staff");
   const [loginPass, setLoginPass] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState(null);
+  const [loginLoading, setLoginLoading] = useState(false);
 
   const role = currentUser?.role;
   const canSeeOverview = role === "Admin";
@@ -46,9 +50,63 @@ export default function Admin() {
   const [newStock, setNewStock] = useState(MIN_UNIT);
   const [newStatus, setNewStatus] = useState("Active");
 
+  // Team creation states
+  const [empFullName, setEmpFullName] = useState("");
+  const [empEmail, setEmpEmail] = useState("");
+  const [empRole, setEmpRole] = useState("Staff");
+  const [empPassword, setEmpPassword] = useState("");
+  const [empLoading, setEmpLoading] = useState(false);
+  const [empMessage, setEmpMessage] = useState("");
+
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyRange, setHistoryRange] = useState("week");
   const [reportsRange, setReportsRange] = useState("month");
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    if (!loginName.trim()) return;
+    setLoginError(null);
+    setLoginLoading(true);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const trimmedName = loginName.trim().toLowerCase();
+
+      // 1. Strict Admin Check
+      if (loginRole === "Admin") {
+        if (trimmedName !== "faith dike" && trimmedName !== "dike") {
+          throw new Error("Unauthorized username for Admin account.");
+        }
+        if (loginPass !== "AdminPass123") {
+          throw new Error("Incorrect password for Admin account.");
+        }
+      } 
+      // 2. Check dynamic or default team accounts for Staff / Manager
+      else {
+        const foundAccount = teamAccounts?.find(
+          (acc) => acc.name.toLowerCase() === trimmedName && acc.role.toLowerCase() === loginRole.toLowerCase()
+        );
+
+        const defaultPasswords = {
+          Manager: "ManagerPass123",
+          Staff: "StaffPass123",
+        };
+
+        const validPass = foundAccount ? foundAccount.password : defaultPasswords[loginRole];
+
+        if (!validPass || loginPass !== validPass) {
+          throw new Error(`Incorrect name or password for ${loginRole} role.`);
+        }
+      }
+
+      setCurrentUser({ name: loginName.trim(), role: loginRole });
+      setLoginLoading(false);
+    } catch (err) {
+      setLoginError(err.message || "Invalid name or password");
+      setLoginLoading(false);
+    }
+  };
 
   if (!currentUser) {
     return (
@@ -59,34 +117,68 @@ export default function Admin() {
           <p style={{ color: "var(--ink-soft)", fontSize: 14, marginBottom: 18 }}>
             Access the Rainbow Wash dashboard.
           </p>
-          <div className="rw-field" style={{ textAlign: "left" }}>
-            <label>Your name (shown on printed slips)</label>
-            <input value={loginName} onChange={(e) => setLoginName(e.target.value)} placeholder="e.g. Faith Oluchi" />
-          </div>
-          <div className="rw-field" style={{ textAlign: "left" }}>
-            <label>Role</label>
-            <div className="rw-pill-group">
-              {ROLES.map((r) => (
-                <button key={r} className={`rw-pill ${loginRole === r ? "active" : ""}`} onClick={() => setLoginRole(r)}>{r}</button>
-              ))}
+
+          {loginError && (
+            <div style={{ color: "var(--bad)", fontSize: 13, marginBottom: 12, background: "#fdece9", padding: "8px", borderRadius: "4px" }}>
+              {loginError}
             </div>
-          </div>
-          <div className="rw-field" style={{ textAlign: "left" }}>
-            <label>Password</label>
-            <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="••••••••" />
-          </div>
-          <button
-            className="rw-btn rw-btn-primary"
-            style={{ width: "100%", justifyContent: "center", marginTop: 6 }}
-            onClick={() => {
-              if (!loginName.trim()) return;
-              setCurrentUser({ name: loginName.trim(), role: loginRole });
-            }}
-          >
-            Log in
-          </button>
+          )}
+
+          <form onSubmit={handleLoginSubmit}>
+            <div className="rw-field" style={{ textAlign: "left" }}>
+              <label>Your name (shown on printed slips)</label>
+              <input value={loginName} onChange={(e) => setLoginName(e.target.value)} placeholder="e.g. Faith Dike" required />
+            </div>
+            <div className="rw-field" style={{ textAlign: "left" }}>
+              <label>Role</label>
+              <div className="rw-pill-group">
+                {ROLES.map((r) => (
+                  <button type="button" key={r} className={`rw-pill ${loginRole === r ? "active" : ""}`} onClick={() => setLoginRole(r)}>{r}</button>
+                ))}
+              </div>
+            </div>
+            <div className="rw-field" style={{ textAlign: "left" }}>
+              <label>Password</label>
+              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={loginPass} 
+                  onChange={(e) => setLoginPass(e.target.value)} 
+                  placeholder="••••••••" 
+                  required 
+                  style={{ width: "100%", paddingRight: "40px" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: "absolute",
+                    right: "10px",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    color: "var(--ink-soft)",
+                    padding: 0
+                  }}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            <button
+              type="submit"
+              className="rw-btn rw-btn-primary"
+              style={{ width: "100%", justifyContent: "center", marginTop: 6 }}
+              disabled={loginLoading}
+            >
+              {loginLoading ? "Authenticating..." : "Log in"}
+            </button>
+          </form>
+
           <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 12 }}>
-            Demo mode, any password works. Real authentication connects once the backend is live.
             Staff: no pricing or reports access. Manager: everything except Overview & Reports. Admin: full access.
           </p>
         </div>
@@ -118,7 +210,6 @@ export default function Admin() {
 
   const restock = (id) => setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, stock: p.stock + RESTOCK_STEP } : p)));
   
-  // Sync updates across both products and addonProducts so pricing reflects everywhere
   const updateProductField = (id, field, value) => {
     setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
     if (field === "price" || field === "name") {
@@ -148,13 +239,11 @@ export default function Admin() {
     const parsedStock = Math.max(MIN_UNIT, Number(newStock) || MIN_UNIT);
     const trimmedName = newName.trim();
 
-    // Add to products list
     setProducts((ps) => [
       ...ps,
       { id, name: trimmedName, price: parsedPrice, stock: parsedStock, status: newStatus },
     ]);
 
-    // Automatically add to addonProducts so it shows up under Pricing
     setAddonProducts((aps) => [
       ...aps,
       { id, label: trimmedName, price: parsedPrice, group: "Shop & Retail Items" }
@@ -166,7 +255,35 @@ export default function Admin() {
     setNewStatus("Active");
   };
 
-  // Pricing editors
+  const handleCreateEmployee = async (e) => {
+    e.preventDefault();
+    setEmpLoading(true);
+    setEmpMessage("");
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      
+      const newAccount = {
+        name: empFullName.trim(),
+        email: empEmail.trim(),
+        role: empRole,
+        password: empPassword,
+      };
+
+      setTeamAccounts((prev) => [...prev, newAccount]);
+
+      setEmpMessage(`Success! Account created for ${empFullName} (${empRole}). Password: ${empPassword}`);
+      setEmpFullName("");
+      setEmpEmail("");
+      setEmpPassword("");
+      setEmpRole("Staff");
+      setEmpLoading(false);
+    } catch (err) {
+      setEmpMessage("Failed to create employee. Please try again.");
+      setEmpLoading(false);
+    }
+  };
+
   const updateSelfWash = (id, price) => setSelfWashRates((rs) => rs.map((r) => (r.id === id ? { ...r, price: Number(price) } : r)));
   const updateStaffWash = (id, price) => setStaffWashRates((rs) => rs.map((r) => (r.id === id ? { ...r, price: Number(price) } : r)));
   const updateDryClean = (id, field, value) => setDryCleanItems((its) => its.map((i) => (i.id === id ? { ...i, [field]: Number(value) } : i)));
@@ -176,10 +293,6 @@ export default function Admin() {
     setAddonProducts((ps) => ps.map((p) => (p.id === id ? { ...p, price: numPrice } : p)));
     setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, price: numPrice } : p)));
   };
-  const updateCleaningPrice = (serviceId, sizeId, price) =>
-    setCleaningServices((css) =>
-      css.map((s) => (s.id === serviceId ? { ...s, sizes: s.sizes.map((sz) => (sz.id === sizeId ? { ...sz, price: Number(price) } : sz)) } : s))
-    );
 
   const historyRows = [
     ...laundryOrders.map((o) => ({
@@ -204,7 +317,6 @@ export default function Admin() {
     })
     .sort((a, b) => new Date(b.placedAt || 0) - new Date(a.placedAt || 0));
 
-  // Reports data (Admin only)
   const allRecords = [
     ...laundryOrders.map((o) => ({ total: o.total, placedAt: o.placedAt, paymentStatus: o.paymentStatus, name: o.fullName, phone: o.phone })),
     ...bookings.map((b) => ({ total: b.payable, placedAt: b.placedAt, paymentStatus: b.paymentStatus, name: b.fullName, phone: b.phone })),
@@ -223,13 +335,6 @@ export default function Admin() {
     clientMap[key].count += 1;
   });
   const topClients = Object.values(clientMap).sort((a, b) => b.total - a.total).slice(0, 6);
-  const maxClientTotal = Math.max(1, ...topClients.map((c) => c.total));
-
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const monthlyTotals = monthNames.map((_, idx) =>
-    allRecords.filter((r) => r.placedAt && new Date(r.placedAt).getMonth() === idx).reduce((s, r) => s + (r.total || 0), 0)
-  );
-  const maxMonthly = Math.max(1, ...monthlyTotals);
 
   const NAV = [
     canSeeOverview && { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -240,6 +345,7 @@ export default function Admin() {
     canEditPricing && { id: "inventory", label: "Inventory", icon: Package },
     canEditPricing && { id: "pricing", label: "Pricing", icon: DollarSign },
     canSeeReports && { id: "reports", label: "Reports", icon: BarChart3 },
+    canSeeOverview && { id: "team", label: "Team Management", icon: User },
   ].filter(Boolean);
 
   return (
@@ -496,41 +602,30 @@ export default function Admin() {
             <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -14, marginBottom: 20 }}>New stock always starts at {MIN_UNIT} units or more, the field won't accept less.</p>
 
             <table className="rw-table">
-              <thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th>Stock level</th><th></th></tr></thead>
+              <thead><tr><th>Product Name</th><th>Price (₦)</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
-                {products.map((p) => {
-                  const low = p.stock <= 5;
-                  return (
-                    <tr key={p.id}>
-                      <td>
-                        <input
-                          type="text"
-                          style={{ width: "100%", padding: "6px 8px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 4, color: "var(--ink)" }}
-                          value={p.name}
-                          onChange={(e) => updateProductField(p.id, "name", e.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          step="50"
-                          style={{ width: 90, padding: "6px 8px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 4, color: "var(--ink)" }}
-                          value={p.price}
-                          onChange={(e) => updateProductField(p.id, "price", Number(e.target.value))}
-                        />
-                      </td>
-                      <td><input type="number" min={MIN_UNIT} style={{ width: 74, padding: "6px 8px" }} value={p.stock} onChange={(e) => updateProductField(p.id, "stock", Math.max(MIN_UNIT, Number(e.target.value) || MIN_UNIT))} /></td>
-                      <td>
-                        <select className="rw-status-select" value={p.status || "Active"} onChange={(e) => updateProductField(p.id, "status", e.target.value)}>
-                          <option value="Active">Active</option>
-                          <option value="Inactive">Inactive</option>
-                        </select>
-                      </td>
-                      <td><span className={`rw-stock-badge ${low ? "rw-stock-low" : "rw-stock-ok"}`}>{low ? "Restock needed" : "Healthy"}</span></td>
-                      <td>{low && <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => restock(p.id)}>+{RESTOCK_STEP} units</button>}</td>
-                    </tr>
-                  );
-                })}
+                {products.map((p) => (
+                  <tr key={p.id}>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={p.name} onChange={(e) => updateProductField(p.id, "name", e.target.value)} /></td>
+                    <td><input type="number" step="50" style={{ width: 100, padding: "6px 8px" }} value={p.price} onChange={(e) => updateProductField(p.id, "price", Number(e.target.value))} /></td>
+                    <td>
+                      <span className={`rw-stock-badge ${p.stock <= 5 ? "rw-stock-low" : "rw-stock-ok"}`} style={{ marginRight: 8 }}>
+                        {p.stock} units
+                      </span>
+                    </td>
+                    <td>
+                      <select className="rw-status-select" value={p.status || "Active"} onChange={(e) => updateProductField(p.id, "status", e.target.value)}>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </td>
+                    <td>
+                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => restock(p.id)}>
+                        Restock (+{RESTOCK_STEP})
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -538,131 +633,225 @@ export default function Admin() {
 
         {tab === "pricing" && canEditPricing && (
           <div>
-            <div className="rw-admin-panel-head"><h2>Pricing</h2></div>
-            <p style={{ color: "var(--ink-soft)", fontSize: 13.5, marginBottom: 22 }}>
-              Edit any price here and it reflects everywhere on the site immediately, Order Laundry, Services, and Book Cleaning.
-            </p>
+            <div className="rw-admin-panel-head">
+              <div>
+                <h2 style={{ marginBottom: 4 }}>Pricing Control Center</h2>
+                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Changes here instantly update prices across all customer-facing pages.</p>
+              </div>
+            </div>
 
-            <h3 style={{ fontSize: 15, marginBottom: 10 }}>Self Wash (per kg)</h3>
+            <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Self-Wash Rates</h3>
             <table className="rw-table" style={{ marginBottom: 24 }}>
-              <thead><tr><th>Service</th><th>Price</th></tr></thead>
+              <thead><tr><th>Service Name</th><th>Price (₦)</th></tr></thead>
               <tbody>
                 {selfWashRates.map((r) => (
-                  <tr key={r.id}><td>{r.label}</td><td><input type="number" step="50" style={{ width: 100 }} value={r.price} onChange={(e) => updateSelfWash(r.id, e.target.value)} /></td></tr>
+                  <tr key={r.id}>
+                    <td>{r.label}</td>
+                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateSelfWash(r.id, e.target.value)} /></td>
+                  </tr>
                 ))}
               </tbody>
             </table>
 
-            <h3 style={{ fontSize: 15, marginBottom: 10 }}>Staff Wash (per kg)</h3>
+            <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Staff-Wash Rates</h3>
             <table className="rw-table" style={{ marginBottom: 24 }}>
-              <thead><tr><th>Service</th><th>Price</th></tr></thead>
+              <thead><tr><th>Service Name</th><th>Price (₦)</th></tr></thead>
               <tbody>
                 {staffWashRates.map((r) => (
-                  <tr key={r.id}><td>{r.label}</td><td><input type="number" step="50" style={{ width: 100 }} value={r.price} onChange={(e) => updateStaffWash(r.id, e.target.value)} /></td></tr>
-                ))}
-              </tbody>
-            </table>
-
-            <h3 style={{ fontSize: 15, marginBottom: 10 }}>Dry Cleaning</h3>
-            <table className="rw-table" style={{ marginBottom: 24 }}>
-              <thead><tr><th>Item</th><th>Regular</th><th>Deep Clean</th></tr></thead>
-              <tbody>
-                {dryCleanItems.map((i) => (
-                  <tr key={i.id}>
-                    <td>{i.label}</td>
-                    <td><input type="number" step="500" style={{ width: 100 }} value={i.regular} onChange={(e) => updateDryClean(i.id, "regular", e.target.value)} /></td>
-                    <td><input type="number" step="500" style={{ width: 100 }} value={i.deep} onChange={(e) => updateDryClean(i.id, "deep", e.target.value)} /></td>
+                  <tr key={r.id}>
+                    <td>{r.label}</td>
+                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateStaffWash(r.id, e.target.value)} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            <h3 style={{ fontSize: 15, marginBottom: 10 }}>Shoe & Leather Care</h3>
+            <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Dry Cleaning Items</h3>
             <table className="rw-table" style={{ marginBottom: 24 }}>
-              <thead><tr><th>Item</th><th>Regular</th><th>Deep Clean</th><th>Minor Repairs</th></tr></thead>
+              <thead><tr><th>Item Name</th><th>Category</th><th>Price (₦)</th></tr></thead>
               <tbody>
-                {shoeCareItems.map((i) => (
-                  <tr key={i.id}>
-                    <td>{i.label}</td>
-                    <td><input type="number" step="500" style={{ width: 90 }} value={i.regular} onChange={(e) => updateShoeCare(i.id, "regular", e.target.value)} /></td>
-                    <td><input type="number" step="500" style={{ width: 90 }} value={i.deep} onChange={(e) => updateShoeCare(i.id, "deep", e.target.value)} /></td>
-                    <td><input type="number" step="500" style={{ width: 90 }} value={i.repair} onChange={(e) => updateShoeCare(i.id, "repair", e.target.value)} /></td>
+                {dryCleanItems.map((item) => (
+                  <tr key={item.id}>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={item.name} onChange={(e) => updateDryClean(item.id, "name", e.target.value)} /></td>
+                    <td>{item.category}</td>
+                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={item.price} onChange={(e) => updateDryClean(item.id, "price", e.target.value)} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            {ADDON_GROUPS.map((group) => (
-              <div key={group}>
-                <h3 style={{ fontSize: 15, marginBottom: 10 }}>{group}</h3>
-                <table className="rw-table" style={{ marginBottom: 24 }}>
-                  <thead><tr><th>Product</th><th>Price</th></tr></thead>
-                  <tbody>
-                    {addonProducts.filter((p) => p.group === group).map((p) => (
-                      <tr key={p.id}><td>{p.label}</td><td><input type="number" step="50" style={{ width: 100 }} value={p.price} onChange={(e) => updateAddon(p.id, e.target.value)} /></td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
+            <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Shoe Care Items</h3>
+            <table className="rw-table" style={{ marginBottom: 24 }}>
+              <thead><tr><th>Service Name</th><th>Price (₦)</th></tr></thead>
+              <tbody>
+                {shoeCareItems.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.name}</td>
+                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={item.price} onChange={(e) => updateShoeCare(item.id, "price", e.target.value)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-            <h3 style={{ fontSize: 15, marginBottom: 10 }}>Home / Office / Deep Clean / Upholstery (internal only, never shown to customers)</h3>
-            {cleaningServices.map((s) => (
-              <table className="rw-table" key={s.id} style={{ marginBottom: 18 }}>
-                <thead><tr><th>{s.label}</th><th>Price</th></tr></thead>
-                <tbody>
-                  {s.sizes.map((sz) => (
-                    <tr key={sz.id}><td>{sz.label}</td><td><input type="number" step="1000" style={{ width: 110 }} value={sz.price} onChange={(e) => updateCleaningPrice(s.id, sz.id, e.target.value)} /></td></tr>
-                  ))}
-                </tbody>
-              </table>
-            ))}
+            <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Shop & Add-on Products</h3>
+            <table className="rw-table" style={{ marginBottom: 24 }}>
+              <thead><tr><th>Product / Addon</th><th>Group</th><th>Price (₦)</th></tr></thead>
+              <tbody>
+                {addonProducts.map((ap) => (
+                  <tr key={ap.id}>
+                    <td>{ap.label}</td>
+                    <td>{ap.group}</td>
+                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={ap.price} onChange={(e) => updateAddon(ap.id, e.target.value)} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
         {tab === "reports" && canSeeReports && (
           <div>
             <div className="rw-admin-panel-head">
-              <h2 style={{ marginBottom: 0 }}>Reports</h2>
+              <div>
+                <h2 style={{ marginBottom: 4 }}>Reports & Financial Summary</h2>
+                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Detailed breakdown of all revenue streams and metrics.</p>
+              </div>
               <div className="rw-pill-group">
-                {RANGES.filter((r) => r.id !== "today").map((r) => (
+                {RANGES.map((r) => (
                   <button key={r.id} className={`rw-pill ${reportsRange === r.id ? "active" : ""}`} onClick={() => setReportsRange(r.id)}>{r.label}</button>
                 ))}
               </div>
             </div>
 
-            <div className="rw-stat-grid">
-              <div className="rw-stat-card"><b>{money(totalInvoiced)}</b><span>Total invoiced</span></div>
-              <div className="rw-stat-card" style={{ background: "#e7f7ee" }}><b style={{ color: "#1e8f4f" }}>{money(paidTotal)}</b><span>Paid (confirmed)</span></div>
-              <div className="rw-stat-card" style={{ background: "#fdece9" }}><b style={{ color: "var(--bad)" }}>{money(unpaidTotal)}</b><span>Unpaid / pending</span></div>
-              <div className="rw-stat-card"><b>{Object.keys(clientMap).length}</b><span>Clients invoiced</span></div>
+            <div className="rw-stat-grid" style={{ marginBottom: 24 }}>
+              <div className="rw-stat-card"><b>{money(totalInvoiced)}</b><span>Total Invoiced</span></div>
+              <div className="rw-stat-card"><b>{money(paidTotal)}</b><span>Confirmed Paid</span></div>
+              <div className="rw-stat-card"><b>{money(unpaidTotal)}</b><span>Pending Collection</span></div>
             </div>
 
-            <h3 style={{ fontSize: 15, margin: "20px 0 12px" }}>Invoiced by month</h3>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 140, padding: "0 4px 20px", borderBottom: "1px solid var(--line)" }}>
-              {monthNames.map((m, idx) => (
-                <div key={m} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                  <div style={{ width: "100%", height: `${Math.max(3, (monthlyTotals[idx] / maxMonthly) * 110)}px`, background: monthlyTotals[idx] > 0 ? "var(--blue)" : "var(--line)", borderRadius: "4px 4px 0 0" }} title={money(monthlyTotals[idx])} />
-                  <span style={{ fontSize: 10.5, color: "var(--ink-soft)" }}>{m}</span>
-                </div>
-              ))}
-            </div>
-
-            <h3 style={{ fontSize: 15, margin: "24px 0 12px" }}>Top clients by revenue</h3>
-            {topClients.length === 0 && <p style={{ color: "var(--ink-soft)", fontSize: 14 }}>No records in this time range yet.</p>}
-            {topClients.map((c) => (
-              <div key={c.phone + c.name} style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, marginBottom: 4 }}>
-                  <span style={{ fontWeight: 600 }}>{c.name} <span style={{ color: "var(--ink-soft)", fontWeight: 400 }}>({c.phone}) · {c.count} order{c.count > 1 ? "s" : ""}</span></span>
-                  <span style={{ fontWeight: 700 }}>{money(c.total)}</span>
-                </div>
-                <div style={{ background: "var(--line)", borderRadius: 99, height: 8, overflow: "hidden" }}>
-                  <div style={{ width: `${(c.total / maxClientTotal) * 100}%`, background: "var(--blue)", height: "100%" }} />
-                </div>
-              </div>
-            ))}
+            <h3 style={{ fontSize: 16, marginBottom: 12 }}>Top Clients by Spend</h3>
+            <table className="rw-table" style={{ marginBottom: 28 }}>
+              <thead><tr><th>Client Name</th><th>Phone</th><th>Total Spend</th><th>Orders Count</th></tr></thead>
+              <tbody>
+                {topClients.map((c, idx) => (
+                  <tr key={idx}>
+                    <td>{c.name}</td>
+                    <td>{c.phone}</td>
+                    <td>{money(c.total)}</td>
+                    <td>{c.count}</td>
+                  </tr>
+                ))}
+                {topClients.length === 0 && (
+                  <tr><td colSpan={4} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No client records for this range.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
+
+        {tab === "team" && canSeeOverview && (
+          <div>
+            <div className="rw-admin-panel-head">
+              <h2>Team Management — Provision Staff & Manager</h2>
+            </div>
+            <p style={{ color: "var(--ink-soft)", fontSize: 13.5, marginBottom: 18 }}>
+              Only Administrators can provision new Staff or Manager accounts. Official credentials created here can be used instantly to log in.
+            </p>
+
+            <div style={{ maxWidth: "500px", background: "#fff", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+              {empMessage && (
+                <div style={{ marginBottom: 15, padding: "10px", fontSize: "13px", background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0", borderRadius: "4px" }}>
+                  {empMessage}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateEmployee}>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Full Name</label>
+                  <input 
+                    type="text" 
+                    value={empFullName}
+                    onChange={(e) => setEmpFullName(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
+                    placeholder="e.g. John Doe"
+                  />
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Email Address</label>
+                  <input 
+                    type="email" 
+                    value={empEmail}
+                    onChange={(e) => setEmpEmail(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
+                    placeholder="john@rainbowwash.com"
+                  />
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Assign Role</label>
+                  <select 
+                    value={empRole} 
+                    onChange={(e) => setEmpRole(e.target.value)}
+                    style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
+                  >
+                    <option value="Staff">Staff</option>
+                    <option value="Manager">Manager</option>
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 505 }}>Set Password</label>
+                  <input 
+                    type="text" 
+                    value={empPassword}
+                    onChange={(e) => setEmpPassword(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
+                    placeholder="Create login password"
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={empLoading}
+                  className="rw-btn rw-btn-primary"
+                  style={{ width: "100%", justifyContent: "center" }}
+                >
+                  {empLoading ? "Creating Account..." : "Create Employee Account"}
+                </button>
+              </form>
+
+              <div style={{ marginTop: 24, borderTop: "1px solid #eee", paddingTop: 12 }}>
+                <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--navy)" }}>Existing Registered Staff & Managers:</h4>
+                <ul style={{ fontSize: 12, paddingLeft: 16, color: "var(--ink-soft)" }}>
+                  {teamAccounts?.map((acc, i) => (
+                    <li key={i} style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span>
+                        <b>{acc.name}</b> ({acc.role}) — Password: <span className="mono">{acc.password}</span>
+                      </span>
+                      {acc.role !== "Admin" && (
+                        <button 
+                          type="button"
+                          className="rw-btn rw-btn-ghost rw-btn-sm"
+                          style={{ color: "var(--bad)", padding: "2px 6px", fontSize: "11px" }}
+                          onClick={() => {
+                            setTeamAccounts((prev) => prev.filter((_, index) => index !== i));
+                          }}
+                        >
+                          Revoke / Delete
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

@@ -81,7 +81,7 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
   align-items: center; 
   justify-content: space-between; 
   gap: 8px; 
-  padding: 12px 10px; /* Adjusted padding to prevent right-edge clipping */
+  padding: 12px 10px;
 }
 
 .rw-nav-left { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
@@ -102,28 +102,58 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 
 /* Dropdown styles for compact desktop navigation */
 .rw-dropdown-container { position: relative; display: inline-block; }
+
+.rw-dropdown-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--ink-soft);
+  padding: 8px 12px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.rw-dropdown-toggle-btn:hover {
+  color: var(--blue);
+  background: #eaf4fb;
+}
+
 .rw-dropdown-menu {
   position: absolute;
   top: 100%;
   left: 0;
   background: #ffffff;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(12, 41, 71, 0.12);
+  padding: 8px;
+  min-width: 220px;
+  z-index: 100;
+  margin-top: 6px;
   display: flex;
   flex-direction: column;
-  padding: 6px;
-  min-width: 200px;
-  z-index: 100;
 }
+
 .rw-dropdown-menu a {
-  font-size: 16px !important;
-  padding: 8px 12px !important;
-  border-radius: 6px;
+  display: block;
+  padding: 10px 14px;
+  color: var(--ink);
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  transition: background 0.15s, color 0.15s;
   white-space: nowrap;
 }
+
 .rw-dropdown-menu a:hover {
-  background: #eaf4fb;
+  background-color: #eaf4fb;
   color: var(--blue);
 }
 
@@ -149,7 +179,6 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
   .rw-brand img { height: 28px; }
   .rw-nav-inner { padding: 8px 8px; gap: 6px; }
   
-  /* Pulls the login button slightly inward by shrinking its internal mobile padding */
   .rw-navcta .rw-btn-sm {
     padding: 6px 10px;
     font-size: 16px;

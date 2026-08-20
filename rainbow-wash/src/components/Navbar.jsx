@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Menu, X, ShoppingCart, Lock, ChevronDown } from "lucide-react";
+import { Menu, X, ShoppingCart, Lock } from "lucide-react";
 import { NAV_ITEMS, RAINBOW } from "../data/constants";
 import logo from "../assets/logo.png";
 import { useApp } from "../context/AppContext";
 
 export default function Navbar({ onCartClick }) {
   const [open, setOpen] = useState(false);
-  const [servicesOpen, setServicesOpen] = useState(false);
   const { cartCount } = useApp();
 
   return (
@@ -32,36 +31,18 @@ export default function Navbar({ onCartClick }) {
           </NavLink>
         </div>
 
-        {/* Center: Desktop links with compact Services dropdown */}
+        {/* Center: Standard desktop links (Services is purely standalone) */}
         <div className="rw-navlinks">
-          {NAV_ITEMS.map((n) => {
-            if (n.label === "Services") {
-              return (
-                <div 
-                  key={n.path} 
-                  className="rw-dropdown-container"
-                  onMouseEnter={() => setServicesOpen(true)}
-                  onMouseLeave={() => setServicesOpen(false)}
-                >
-                  <NavLink to={n.path} className={({ isActive }) => (isActive ? "active" : "")}>
-                    Services <ChevronDown size={14} style={{ display: "inline", marginLeft: "2px" }} />
-                  </NavLink>
-                  {servicesOpen && (
-                    <div className="rw-dropdown-menu">
-                      <NavLink to="/services">All Laundry Services</NavLink>
-                      <NavLink to="/services#cleaning">Cleaning & Deep Clean</NavLink>
-                      <NavLink to="/services#express">Express Delivery</NavLink>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-            return (
-              <NavLink key={n.path} to={n.path} className={({ isActive }) => (isActive ? "active" : "")} end={n.path === "/"}>
-                {n.label}
-              </NavLink>
-            );
-          })}
+          {NAV_ITEMS.map((n) => (
+            <NavLink 
+              key={n.path} 
+              to={n.path} 
+              className={({ isActive }) => (isActive ? "active" : "")} 
+              end={n.path === "/"}
+            >
+              {n.label}
+            </NavLink>
+          ))}
         </div>
 
         {/* Right side: Cart and Login */}
@@ -76,10 +57,16 @@ export default function Navbar({ onCartClick }) {
         </div>
       </div>
 
-      {/* Mobile Dropdown Menu Drawer */}
+      {/* Mobile Menu Drawer */}
       <div className={`rw-mobile-menu ${open ? "open" : ""}`}>
         {NAV_ITEMS.map((n) => (
-          <NavLink key={n.path} to={n.path} onClick={() => setOpen(false)} className={({ isActive }) => (isActive ? "active" : "")} end={n.path === "/"}>
+          <NavLink 
+            key={n.path} 
+            to={n.path} 
+            onClick={() => setOpen(false)} 
+            className={({ isActive }) => (isActive ? "active" : "")} 
+            end={n.path === "/"}
+          >
             {n.label}
           </NavLink>
         ))}
