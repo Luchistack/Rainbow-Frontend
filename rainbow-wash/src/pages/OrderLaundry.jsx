@@ -29,7 +29,7 @@ const TURNAROUND = [
 
 const CARE_TIPS = [
   "Empty pockets and check for loose buttons before drop-off.",
-  "Point out any existing stains so we can pre-treat them.",
+  "Point out any existing stains so we can pre treat them.",
   "Separate delicates into their own bag if possible.",
   "Note fabric-specific instructions in the address/notes field.",
 ];
@@ -40,7 +40,7 @@ function buildReceipt(order) {
     "🧺 New Laundry Order, Rainbow Wash",
     `Ref: ${order.id}`,
     itemLines,
-    `Fulfilment: ${order.fulfilment === "pickup" ? "Pickup & delivery" : "Drop-off in-store"}`,
+    `Fulfilment: ${order.fulfilment === "pickup" ? "Pickup & delivery" : "Drop off, in store"}`,
   ];
   if (order.fulfilment === "pickup") {
     lines.push(`Address: ${order.address || "—"}`);
@@ -195,7 +195,7 @@ export default function OrderLaundry() {
 
   return (
     <div>
-      <PageHeader title="Order Laundry" subtitle="Self wash, staff wash, dry cleaning, shoe & leather care, priced exactly like our in-store list." />
+      <PageHeader title="Order Laundry" subtitle="Self wash, staff wash, dry cleaning, shoe & leather care, priced exactly like our in store list." />
       <div className="rw-section" style={{ paddingTop: 44 }}>
         <div className="rw-grid-2" style={{ alignItems: "flex-start" }}>
           <div>
@@ -471,7 +471,7 @@ export default function OrderLaundry() {
           { q: "Do I get a discount on Self Wash?", a: `Yes, any Self Wash line of ${SELF_WASH_DISCOUNT_KG}kg or more automatically gets ${SELF_WASH_DISCOUNT_RATE * 100}% off.` },
           { q: "How fast is delivery?", a: "Same day or next day delivery, depending on when your items are dropped off and the service selected." },
           { q: "What payment methods are accepted?", a: "Paystack, Flutterwave, or direct bank transfer, choose at checkout." },
-          { q: "Is there a delivery fee?", a: `A flat ${money(DELIVERY_FEE)} fee applies for pickup and delivery combined. ${DELIVERY_COVERAGE_NOTE} Drop-off in-store has no extra fee.` },
+          { q: "Is there a delivery fee?", a: `A flat ${money(DELIVERY_FEE)} fee applies for pickup and delivery combined. ${DELIVERY_COVERAGE_NOTE} Drop off, in store has no extra fee.` },
           { q: "Why do you ask for my phone number?", a: "So our team can call you the moment your order is ready or if anything needs confirming." },
         ]}
       />

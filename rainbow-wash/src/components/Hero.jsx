@@ -49,7 +49,7 @@ export default function Hero() {
         <h1>Coloring your world with <em>cleanliness.</em></h1>
         <p className="lead">
           Wash, iron and deep clean, pickup and delivery included. Rainbow Wash Laundry and Cleaning Services takes the laundry
-          pile and the dusty upholstery off your to-do list.
+          pile and the dusty upholstery off your to do list.
         </p>
         <div className="rw-hero-actions">
           <Link to="/order-laundry" className="rw-btn rw-btn-rainbow">

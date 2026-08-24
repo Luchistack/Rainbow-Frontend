@@ -11,17 +11,17 @@ import { useApp } from "../context/AppContext";
 const SERVICES = [
   { icon: Shirt, color: "#27AAE1", title: "Self Wash", desc: "Bring your laundry and use our machines yourself at a discounted rate." },
   { icon: Sparkles, color: "#F7941D", title: "Washing & Ironing", desc: "Full wash, dry and press service, folded and ready to wear." },
-  { icon: Truck, color: "#39B54A", title: "Express Wash", desc: "Same-day turnaround for when you need it back in a hurry." },
+  { icon: Truck, color: "#39B54A", title: "Express Wash", desc: "Same day turnaround for when you need it back in a hurry." },
   { icon: HomeIcon, color: "#8E44AD", title: "Cleaning Services", desc: "Home, office and deep cleaning carried out by trained staff." },
-  { icon: Package, color: "#EF4136", title: "Upholstery", desc: "Sofas, chairs, car interiors and mattresses steam-cleaned on site." },
+  { icon: Package, color: "#EF4136", title: "Upholstery", desc: "Sofas, chairs, car interiors and mattresses steam cleaned on site." },
   { icon: Truck, color: "#4fb3e8", title: "Pickup & Delivery", desc: "We collect and return your laundry to your doorstep." },
   { icon: Sparkles, color: "#FFCE33", title: "Dry Cleaning", desc: "Gentle, professional care for delicate and formal garments." },
 ];
 
 const PROCESS = [
   { title: "Choose a service", desc: "Laundry by weight or item, or a cleaning appointment for home, office or upholstery." },
-  { title: "Set your schedule", desc: "Drop off in-store, or pick a pickup window that fits your day." },
-  { title: "We do the work", desc: "Weighed, washed, pressed or deep-cleaned by trained staff, start to finish." },
+  { title: "Set your schedule", desc: "Drop off in store, or pick a pickup window that fits your day." },
+  { title: "We do the work", desc: "Weighed, washed, pressed or deep cleaned by trained staff, start to finish." },
   { title: "Pay and track", desc: "Pay online via Paystack, Flutterwave or bank transfer, then track live status." },
 ];
 
@@ -63,7 +63,7 @@ export default function Services() {
         </div>
       </div>
 
-      <Steps kicker="How booking works" title="From drop-off to delivery" steps={PROCESS} />
+      <Steps kicker="How booking works" title="From drop off to delivery" steps={PROCESS} />
 
       <div className="rw-section" style={{ paddingTop: 0 }}>
         <div className="rw-section-head">

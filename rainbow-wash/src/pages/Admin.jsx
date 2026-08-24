@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Lock, LayoutDashboard, Truck, Calendar, Package, Plus, ShoppingBag, History, Search,
-  Archive, Shirt, RefreshCw, DollarSign, BarChart3, Printer, LogOut, User, Eye, EyeOff,
+  Archive, Shirt, RefreshCw, DollarSign, BarChart3, Printer, LogOut, User, Eye, EyeOff, KeyRound, Shield, Trash2,
 } from "lucide-react";
-import { TRACK_STAGES, PAYMENT_STATUSES, ROLES } from "../data/constants";
+import { TRACK_STAGES, PAYMENT_STATUSES } from "../data/constants";
 import { money, formatPlacedAt, isToday, matchesRange } from "../utils/format";
 import { useApp } from "../context/AppContext";
 import { openPrintSlip } from "../utils/print";
+import {
+  loginAdmin, logoutUser, createEmployee, fetchEmployees, resetEmployeePassword, changePassword,
+  createProduct, updateProduct, deleteProduct,
+} from "../api/api";
 
 const MIN_UNIT = 5;
 const RESTOCK_STEP = 5;
@@ -27,11 +31,10 @@ export default function Admin() {
     dryCleanItems, setDryCleanItems, shoeCareItems, setShoeCareItems,
     addonProducts, setAddonProducts,
     currentUser, setCurrentUser,
-    teamAccounts, setTeamAccounts,
+    notify,
   } = useApp();
 
-  const [loginName, setLoginName] = useState("");
-  const [loginRole, setLoginRole] = useState("Staff");
+  const [loginEmail, setLoginEmail] = useState("");
   const [loginPass, setLoginPass] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState(null);
@@ -49,64 +52,82 @@ export default function Admin() {
   const [newPrice, setNewPrice] = useState("");
   const [newStock, setNewStock] = useState(MIN_UNIT);
   const [newStatus, setNewStatus] = useState("Active");
+  const [addingProduct, setAddingProduct] = useState(false);
 
   // Team creation states
   const [empFullName, setEmpFullName] = useState("");
   const [empEmail, setEmpEmail] = useState("");
   const [empRole, setEmpRole] = useState("Staff");
-  const [empPassword, setEmpPassword] = useState("");
   const [empLoading, setEmpLoading] = useState(false);
   const [empMessage, setEmpMessage] = useState("");
+
+  // Real employee list, fetched from the backend (not local state) — this is what's
+  // actually in Postgres, so it reflects reality across every browser/device.
+  const [employees, setEmployees] = useState([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState("");
+  const [resettingId, setResettingId] = useState(null);
+
+  // Own account password change (available to every logged-in role)
+  const [currentPasswordInput, setCurrentPasswordInput] = useState("");
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
+  const [changePwLoading, setChangePwLoading] = useState(false);
+  const [changePwMessage, setChangePwMessage] = useState("");
+  const [changePwError, setChangePwError] = useState(false);
 
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyRange, setHistoryRange] = useState("week");
   const [reportsRange, setReportsRange] = useState("month");
 
+  // Turns the backend's "ADMIN" / "MANAGER" / "STAFF" (Java enum .name()) into the
+  // "Admin" / "Manager" / "Staff" strings the rest of this dashboard's role checks
+  // (canSeeOverview, canEditPricing, canSeeReports) already expect.
+  const normalizeRole = (backendRole) => {
+    if (!backendRole) return "Staff";
+    return backendRole.charAt(0).toUpperCase() + backendRole.slice(1).toLowerCase();
+  };
+
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    if (!loginName.trim()) return;
+    if (!loginEmail.trim() || !loginPass) return;
     setLoginError(null);
     setLoginLoading(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      const trimmedName = loginName.trim().toLowerCase();
-
-      // 1. Strict Admin Check
-      if (loginRole === "Admin") {
-        if (trimmedName !== "faith dike" && trimmedName !== "dike") {
-          throw new Error("Unauthorized username for Admin account.");
-        }
-        if (loginPass !== "AdminPass123") {
-          throw new Error("Incorrect password for Admin account.");
-        }
-      } 
-      // 2. Check dynamic or default team accounts for Staff / Manager
-      else {
-        const foundAccount = teamAccounts?.find(
-          (acc) => acc.name.toLowerCase() === trimmedName && acc.role.toLowerCase() === loginRole.toLowerCase()
-        );
-
-        const defaultPasswords = {
-          Manager: "ManagerPass123",
-          Staff: "StaffPass123",
-        };
-
-        const validPass = foundAccount ? foundAccount.password : defaultPasswords[loginRole];
-
-        if (!validPass || loginPass !== validPass) {
-          throw new Error(`Incorrect name or password for ${loginRole} role.`);
-        }
-      }
-
-      setCurrentUser({ name: loginName.trim(), role: loginRole });
-      setLoginLoading(false);
+      const data = await loginAdmin({ email: loginEmail.trim(), password: loginPass });
+      setCurrentUser({ name: data.name, role: normalizeRole(data.role) });
     } catch (err) {
-      setLoginError(err.message || "Invalid name or password");
+      setLoginError(err.message || "Invalid email or password");
+    } finally {
       setLoginLoading(false);
     }
   };
+
+  const handleLogout = () => {
+    logoutUser();
+    setCurrentUser(null);
+  };
+
+  const loadEmployees = async () => {
+    setEmployeesLoading(true);
+    try {
+      const data = await fetchEmployees();
+      setEmployees(data);
+    } catch (err) {
+      // Leaves the list as-is on failure; the Team tab still shows whatever it last had.
+    } finally {
+      setEmployeesLoading(false);
+    }
+  };
+
+  // Load the real employee list whenever an Admin opens the Team tab.
+  useEffect(() => {
+    if (tab === "team" && canSeeOverview) {
+      loadEmployees();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, canSeeOverview]);
 
   if (!currentUser) {
     return (
@@ -126,16 +147,14 @@ export default function Admin() {
 
           <form onSubmit={handleLoginSubmit}>
             <div className="rw-field" style={{ textAlign: "left" }}>
-              <label>Your name (shown on printed slips)</label>
-              <input value={loginName} onChange={(e) => setLoginName(e.target.value)} placeholder="e.g. Faith Dike" required />
-            </div>
-            <div className="rw-field" style={{ textAlign: "left" }}>
-              <label>Role</label>
-              <div className="rw-pill-group">
-                {ROLES.map((r) => (
-                  <button type="button" key={r} className={`rw-pill ${loginRole === r ? "active" : ""}`} onClick={() => setLoginRole(r)}>{r}</button>
-                ))}
-              </div>
+              <label>Email</label>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="you@rainbowwash.com"
+                required
+              />
             </div>
             <div className="rw-field" style={{ textAlign: "left" }}>
               <label>Password</label>
@@ -208,14 +227,49 @@ export default function Admin() {
   const updateShopOrderStatus = (id, status) => setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o)));
   const updateShopPayment = (id, paymentStatus) => setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentStatus } : o)));
 
-  const restock = (id) => setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, stock: p.stock + RESTOCK_STEP } : p)));
-  
+  // --- Inventory: local field edits (as-you-type, no network call) ---
   const updateProductField = (id, field, value) => {
     setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
     if (field === "price" || field === "name") {
       setAddonProducts((aps) =>
         aps.map((ap) => (ap.id === id || ap.label === products.find(p => p.id === id)?.name ? { ...ap, [field === "name" ? "label" : field]: value } : ap))
       );
+    }
+  };
+
+  // --- Inventory: persist a product's current field values to the backend.
+  // Called on blur for text/number fields, and immediately for discrete actions
+  // (status dropdown, restock) so those don't need a separate blur trigger. ---
+  const persistProduct = async (product) => {
+    try {
+      const saved = await updateProduct(product.id, product);
+      setProducts((ps) => ps.map((p) => (p.id === product.id ? saved : p)));
+    } catch (err) {
+      notify("Failed to save product changes");
+    }
+  };
+
+  const updateProductStatus = (id, status) => {
+    const updated = { ...products.find((p) => p.id === id), status };
+    setProducts((ps) => ps.map((p) => (p.id === id ? updated : p)));
+    persistProduct(updated);
+  };
+
+  const restock = (id) => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return;
+    const updated = { ...target, stock: target.stock + RESTOCK_STEP };
+    setProducts((ps) => ps.map((p) => (p.id === id ? updated : p)));
+    persistProduct(updated);
+  };
+
+  const removeProduct = async (id) => {
+    try {
+      await deleteProduct(id);
+      setProducts((ps) => ps.filter((p) => p.id !== id));
+      setAddonProducts((aps) => aps.filter((ap) => ap.id !== id));
+    } catch (err) {
+      notify("Failed to delete product");
     }
   };
 
@@ -232,27 +286,36 @@ export default function Admin() {
     clearTodaysShopOrders();
   };
 
-  const addProduct = () => {
+  // --- Inventory: create a real product on the backend, then reflect the real
+  // saved row (with its real DB id) in local state — no more fake "p"+Date.now() ids. ---
+  const addProduct = async () => {
     if (!newName.trim() || !newPrice) return;
-    const id = "p" + Date.now();
-    const parsedPrice = Math.max(0, Number(newPrice));
-    const parsedStock = Math.max(MIN_UNIT, Number(newStock) || MIN_UNIT);
-    const trimmedName = newName.trim();
+    setAddingProduct(true);
+    try {
+      const saved = await createProduct({
+        name: newName.trim(),
+        price: Math.max(0, Number(newPrice)),
+        stock: Math.max(MIN_UNIT, Number(newStock) || MIN_UNIT),
+        status: newStatus,
+        category: "Shop",
+        description: "",
+      });
 
-    setProducts((ps) => [
-      ...ps,
-      { id, name: trimmedName, price: parsedPrice, stock: parsedStock, status: newStatus },
-    ]);
+      setProducts((ps) => [...ps, saved]);
+      setAddonProducts((aps) => [
+        ...aps,
+        { id: saved.id, label: saved.name, price: saved.price, group: "Shop & Retail Items" }
+      ]);
 
-    setAddonProducts((aps) => [
-      ...aps,
-      { id, label: trimmedName, price: parsedPrice, group: "Shop & Retail Items" }
-    ]);
-
-    setNewName("");
-    setNewPrice("");
-    setNewStock(MIN_UNIT);
-    setNewStatus("Active");
+      setNewName("");
+      setNewPrice("");
+      setNewStock(MIN_UNIT);
+      setNewStatus("Active");
+    } catch (err) {
+      notify("Failed to add product");
+    } finally {
+      setAddingProduct(false);
+    }
   };
 
   const handleCreateEmployee = async (e) => {
@@ -261,26 +324,72 @@ export default function Admin() {
     setEmpMessage("");
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      
-      const newAccount = {
-        name: empFullName.trim(),
+      const result = await createEmployee({
+        fullName: empFullName.trim(),
         email: empEmail.trim(),
-        role: empRole,
-        password: empPassword,
-      };
+        role: empRole.toUpperCase(), // "Staff" -> "STAFF", "Manager" -> "MANAGER", matching the UserRole enum
+      });
 
-      setTeamAccounts((prev) => [...prev, newAccount]);
-
-      setEmpMessage(`Success! Account created for ${empFullName} (${empRole}). Password: ${empPassword}`);
+      setEmpMessage(
+        `Success! Account created for ${empFullName} (${empRole}). Temporary password: ${result.tempPassword} — share this with them directly, it won't be shown again.`
+      );
       setEmpFullName("");
       setEmpEmail("");
-      setEmpPassword("");
       setEmpRole("Staff");
-      setEmpLoading(false);
+
+      // Refresh the real list from the backend so the new account shows up immediately.
+      loadEmployees();
     } catch (err) {
-      setEmpMessage("Failed to create employee. Please try again.");
+      setEmpMessage(err.message || "Failed to create employee. Please try again.");
+    } finally {
       setEmpLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (employee) => {
+    setResettingId(employee.id);
+    setResetMessage("");
+    try {
+      const result = await resetEmployeePassword(employee.id);
+      setResetMessage(
+        `New password for ${employee.fullName} (${employee.email}): ${result.tempPassword} — share this with them directly, it won't be shown again.`
+      );
+    } catch (err) {
+      setResetMessage(err.message || "Failed to reset password. Please try again.");
+    } finally {
+      setResettingId(null);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setChangePwMessage("");
+    setChangePwError(false);
+
+    if (newPasswordInput.length < 8) {
+      setChangePwMessage("New password must be at least 8 characters.");
+      setChangePwError(true);
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setChangePwMessage("New password and confirmation don't match.");
+      setChangePwError(true);
+      return;
+    }
+
+    setChangePwLoading(true);
+    try {
+      await changePassword({ currentPassword: currentPasswordInput, newPassword: newPasswordInput });
+      setChangePwMessage("Password changed successfully.");
+      setChangePwError(false);
+      setCurrentPasswordInput("");
+      setNewPasswordInput("");
+      setConfirmPasswordInput("");
+    } catch (err) {
+      setChangePwMessage(err.message || "Failed to change password. Please try again.");
+      setChangePwError(true);
+    } finally {
+      setChangePwLoading(false);
     }
   };
 
@@ -346,6 +455,7 @@ export default function Admin() {
     canEditPricing && { id: "pricing", label: "Pricing", icon: DollarSign },
     canSeeReports && { id: "reports", label: "Reports", icon: BarChart3 },
     canSeeOverview && { id: "team", label: "Team Management", icon: User },
+    { id: "account", label: "Change Password", icon: Shield },
   ].filter(Boolean);
 
   return (
@@ -361,7 +471,7 @@ export default function Admin() {
         {NAV.map((n) => (
           <button key={n.id} className={tab === n.id ? "active" : ""} onClick={() => setTab(n.id)}><n.icon size={16} /> {n.label}</button>
         ))}
-        <button style={{ marginTop: 14 }} onClick={() => setCurrentUser(null)}><LogOut size={16} /> Log out</button>
+        <button style={{ marginTop: 14 }} onClick={handleLogout}><LogOut size={16} /> Log out</button>
       </div>
 
       <div className="rw-admin-main">
@@ -462,7 +572,7 @@ export default function Admin() {
                     <td>{b.fullName || "—"}</td>
                     <td>{b.service}</td>
                     <td>{b.size}</td>
-                    <td>{b.date || "—"} {b.time}</td>
+                    <td>{b.bookingDate || "—"} {b.bookingTime}</td>
                     <td>{b.phone || "—"}</td>
                     <td><input type="number" step="500" style={{ width: 90, padding: "6px 8px" }} value={b.payable} onChange={(e) => updateBookingPayable(b.id, e.target.value)} /></td>
                     <td>
@@ -597,7 +707,9 @@ export default function Admin() {
                   <option value="Inactive">Inactive</option>
                 </select>
               </div>
-              <button className="rw-btn rw-btn-primary" onClick={addProduct}><Plus size={15} /> Add Product</button>
+              <button className="rw-btn rw-btn-primary" onClick={addProduct} disabled={addingProduct}>
+                <Plus size={15} /> {addingProduct ? "Adding..." : "Add Product"}
+              </button>
             </div>
             <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -14, marginBottom: 20 }}>New stock always starts at {MIN_UNIT} units or more, the field won't accept less.</p>
 
@@ -606,22 +718,39 @@ export default function Admin() {
               <tbody>
                 {products.map((p) => (
                   <tr key={p.id}>
-                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={p.name} onChange={(e) => updateProductField(p.id, "name", e.target.value)} /></td>
-                    <td><input type="number" step="50" style={{ width: 100, padding: "6px 8px" }} value={p.price} onChange={(e) => updateProductField(p.id, "price", Number(e.target.value))} /></td>
+                    <td>
+                      <input
+                        style={{ width: "100%", padding: "6px 8px" }}
+                        value={p.name}
+                        onChange={(e) => updateProductField(p.id, "name", e.target.value)}
+                        onBlur={() => persistProduct(products.find((x) => x.id === p.id))}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number" step="50" style={{ width: 100, padding: "6px 8px" }}
+                        value={p.price}
+                        onChange={(e) => updateProductField(p.id, "price", Number(e.target.value))}
+                        onBlur={() => persistProduct(products.find((x) => x.id === p.id))}
+                      />
+                    </td>
                     <td>
                       <span className={`rw-stock-badge ${p.stock <= 5 ? "rw-stock-low" : "rw-stock-ok"}`} style={{ marginRight: 8 }}>
                         {p.stock} units
                       </span>
                     </td>
                     <td>
-                      <select className="rw-status-select" value={p.status || "Active"} onChange={(e) => updateProductField(p.id, "status", e.target.value)}>
+                      <select className="rw-status-select" value={p.status || "Active"} onChange={(e) => updateProductStatus(p.id, e.target.value)}>
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                       </select>
                     </td>
-                    <td>
+                    <td style={{ display: "flex", gap: 4 }}>
                       <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => restock(p.id)}>
                         Restock (+{RESTOCK_STEP})
+                      </button>
+                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => removeProduct(p.id)} title="Delete product">
+                        <Trash2 size={13} color="#e0473f" />
                       </button>
                     </td>
                   </tr>
@@ -755,99 +884,185 @@ export default function Admin() {
               <h2>Team Management — Provision Staff & Manager</h2>
             </div>
             <p style={{ color: "var(--ink-soft)", fontSize: 13.5, marginBottom: 18 }}>
-              Only Administrators can provision new Staff or Manager accounts. Official credentials created here can be used instantly to log in.
+              Only Administrators can provision new Staff or Manager accounts. Passwords are never stored or shown again
+              after creation — if someone forgets theirs, use "Reset Password" below to issue them a new one.
             </p>
 
-            <div style={{ maxWidth: "500px", background: "#fff", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
-              {empMessage && (
-                <div style={{ marginBottom: 15, padding: "10px", fontSize: "13px", background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0", borderRadius: "4px" }}>
-                  {empMessage}
+            <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ maxWidth: "500px", flex: "1 1 400px", background: "#fff", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                <h4 style={{ fontSize: 14, marginBottom: 14 }}>Create New Account</h4>
+                {empMessage && (
+                  <div style={{ marginBottom: 15, padding: "10px", fontSize: "13px", background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0", borderRadius: "4px" }}>
+                    {empMessage}
+                  </div>
+                )}
+
+                <form onSubmit={handleCreateEmployee}>
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Full Name</label>
+                    <input 
+                      type="text" 
+                      value={empFullName}
+                      onChange={(e) => setEmpFullName(e.target.value)}
+                      required
+                      style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
+                      placeholder="e.g. John Doe"
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Email Address</label>
+                    <input 
+                      type="email" 
+                      value={empEmail}
+                      onChange={(e) => setEmpEmail(e.target.value)}
+                      required
+                      style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
+                      placeholder="john@rainbowwash.com"
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Assign Role</label>
+                    <select 
+                      value={empRole} 
+                      onChange={(e) => setEmpRole(e.target.value)}
+                      style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
+                    >
+                      <option value="Staff">Staff</option>
+                      <option value="Manager">Manager</option>
+                    </select>
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={empLoading}
+                    className="rw-btn rw-btn-primary"
+                    style={{ width: "100%", justifyContent: "center" }}
+                  >
+                    {empLoading ? "Creating Account..." : "Create Employee Account"}
+                  </button>
+                </form>
+              </div>
+
+              <div style={{ maxWidth: "500px", flex: "1 1 400px", background: "#fff", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                <h4 style={{ fontSize: 14, marginBottom: 14 }}>Existing Staff & Managers</h4>
+
+                {resetMessage && (
+                  <div style={{ marginBottom: 15, padding: "10px", fontSize: "13px", background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0", borderRadius: "4px" }}>
+                    {resetMessage}
+                  </div>
+                )}
+
+                {employeesLoading && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Loading...</p>}
+
+                {!employeesLoading && employees.length === 0 && (
+                  <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>No Staff or Manager accounts yet.</p>
+                )}
+
+                {!employeesLoading && employees.length > 0 && (
+                  <ul style={{ fontSize: 13, listStyle: "none", padding: 0 }}>
+                    {employees.map((emp) => (
+                      <li
+                        key={emp.id}
+                        style={{
+                          display: "flex", justifyContent: "space-between", alignItems: "center",
+                          padding: "10px 0", borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        <span>
+                          <b>{emp.fullName}</b> ({normalizeRole(emp.role)})
+                          <br />
+                          <span style={{ color: "var(--ink-soft)", fontSize: 12 }}>{emp.email}</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="rw-btn rw-btn-ghost rw-btn-sm"
+                          onClick={() => handleResetPassword(emp)}
+                          disabled={resettingId === emp.id}
+                          title="Generate a new password for this account"
+                        >
+                          <KeyRound size={13} /> {resettingId === emp.id ? "Resetting..." : "Reset Password"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === "account" && (
+          <div>
+            <div className="rw-admin-panel-head">
+              <h2>Change Password</h2>
+            </div>
+            <p style={{ color: "var(--ink-soft)", fontSize: 13.5, marginBottom: 18 }}>
+              Set a password you'll actually remember. You'll need your current password to confirm it's really you.
+            </p>
+
+            <div style={{ maxWidth: "420px", background: "#fff", padding: "20px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+              {changePwMessage && (
+                <div
+                  style={{
+                    marginBottom: 15, padding: "10px", fontSize: "13px", borderRadius: "4px",
+                    background: changePwError ? "#fdece9" : "#f0fdf4",
+                    color: changePwError ? "var(--bad)" : "#166534",
+                    border: `1px solid ${changePwError ? "#f5c6c0" : "#bbf7d0"}`,
+                  }}
+                >
+                  {changePwMessage}
                 </div>
               )}
 
-              <form onSubmit={handleCreateEmployee}>
+              <form onSubmit={handleChangePassword}>
                 <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Full Name</label>
-                  <input 
-                    type="text" 
-                    value={empFullName}
-                    onChange={(e) => setEmpFullName(e.target.value)}
+                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Current Password</label>
+                  <input
+                    type="password"
+                    value={currentPasswordInput}
+                    onChange={(e) => setCurrentPasswordInput(e.target.value)}
                     required
                     style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
-                    placeholder="e.g. John Doe"
+                    placeholder="Your current password"
                   />
                 </div>
 
                 <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Email Address</label>
-                  <input 
-                    type="email" 
-                    value={empEmail}
-                    onChange={(e) => setEmpEmail(e.target.value)}
+                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>New Password</label>
+                  <input
+                    type="password"
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
                     required
+                    minLength={8}
                     style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
-                    placeholder="john@rainbowwash.com"
+                    placeholder="At least 8 characters"
                   />
-                </div>
-
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Assign Role</label>
-                  <select 
-                    value={empRole} 
-                    onChange={(e) => setEmpRole(e.target.value)}
-                    style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
-                  >
-                    <option value="Staff">Staff</option>
-                    <option value="Manager">Manager</option>
-                  </select>
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 505 }}>Set Password</label>
-                  <input 
-                    type="text" 
-                    value={empPassword}
-                    onChange={(e) => setEmpPassword(e.target.value)}
+                  <label style={{ display: "block", marginBottom: 5, fontSize: 13, fontWeight: 500 }}>Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={confirmPasswordInput}
+                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
                     required
                     style={{ width: "100%", padding: "8px", border: "1px solid #ccc", borderRadius: "4px" }}
-                    placeholder="Create login password"
+                    placeholder="Re-enter your new password"
                   />
                 </div>
 
-                <button 
-                  type="submit" 
-                  disabled={empLoading}
+                <button
+                  type="submit"
+                  disabled={changePwLoading}
                   className="rw-btn rw-btn-primary"
                   style={{ width: "100%", justifyContent: "center" }}
                 >
-                  {empLoading ? "Creating Account..." : "Create Employee Account"}
+                  {changePwLoading ? "Updating..." : "Update Password"}
                 </button>
               </form>
-
-              <div style={{ marginTop: 24, borderTop: "1px solid #eee", paddingTop: 12 }}>
-                <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--navy)" }}>Existing Registered Staff & Managers:</h4>
-                <ul style={{ fontSize: 12, paddingLeft: 16, color: "var(--ink-soft)" }}>
-                  {teamAccounts?.map((acc, i) => (
-                    <li key={i} style={{ marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span>
-                        <b>{acc.name}</b> ({acc.role}) — Password: <span className="mono">{acc.password}</span>
-                      </span>
-                      {acc.role !== "Admin" && (
-                        <button 
-                          type="button"
-                          className="rw-btn rw-btn-ghost rw-btn-sm"
-                          style={{ color: "var(--bad)", padding: "2px 6px", fontSize: "11px" }}
-                          onClick={() => {
-                            setTeamAccounts((prev) => prev.filter((_, index) => index !== i));
-                          }}
-                        >
-                          Revoke / Delete
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
             </div>
           </div>
         )}

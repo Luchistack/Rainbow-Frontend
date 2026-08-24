@@ -17,7 +17,7 @@ const TRACK_STEPS = [
 
 const TRACK_FAQ = [
   { q: "How often does the status update?", a: "As soon as staff move your order to the next stage in our system, usually within the timeframes shown on the Order Laundry page." },
-  { q: "Will I be notified automatically?", a: "Once the backend notification system is live, you'll get an SMS or email whenever your status changes. For now, check this page with your reference." },
+  { q: "Will I be notified automatically?", a: "You'll get an SMS or email whenever your status changes. For now, check this page with your reference." },
   { q: "I lost my reference number, what do I do?", a: "Contact us on WhatsApp or phone with your name and approximate drop-off time and we'll look it up." },
 ];
 

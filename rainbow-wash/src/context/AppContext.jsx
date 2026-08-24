@@ -3,7 +3,7 @@ import {
   PRODUCTS, SELF_WASH_RATES, STAFF_WASH_RATES, DRY_CLEAN_ITEMS, SHOE_CARE_ITEMS,
   ADDON_PRODUCTS, CLEANING_SERVICES,
 } from "../data/constants";
-import { fetchCleaningServices } from "../api/api";
+import { fetchCleaningServices, fetchBookings, fetchProducts } from "../api/api";
 
 const AppContext = createContext(null);
 
@@ -99,7 +99,9 @@ export function AppProvider({ children }) {
   const [cart, setCart] = useState([]);
   const [toast, setToast] = useState("");
 
-  // Shop inventory (existing)
+  // Shop inventory — now backed by the real Postgres products table (see the
+  // fetch effect below); the constant here is only the initial/fallback value
+  // shown before the fetch resolves or if the backend is unreachable.
   const [products, setProducts] = usePersistedState("products", PRODUCTS);
 
   // Service pricing — editable by Manager/Admin in the dashboard's Pricing
@@ -136,6 +138,41 @@ export function AppProvider({ children }) {
     };
     loadBackendData();
   }, []);
+
+  // Fetch real shop products from the backend on mount. GET /api/products is
+  // public, so this works for anonymous customers on the Shop page too, not
+  // just logged-in staff.
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        const data = await fetchProducts();
+        if (data) {
+          setProducts(data);
+        }
+      } catch (error) {
+        // Fallback gracefully to local storage / constants if backend is offline
+      }
+    };
+    loadProducts();
+  }, []);
+
+  // Fetch real cleaning bookings from the backend once staff are logged in.
+  // GET /api/bookings requires a JWT, so this only fires after currentUser
+  // is set (i.e. after a successful staff/manager/admin login).
+  useEffect(() => {
+    if (!currentUser) return;
+    const loadBookings = async () => {
+      try {
+        const data = await fetchBookings();
+        if (data) {
+          setBookings(data);
+        }
+      } catch (error) {
+        // Falls back to whatever's in localStorage if the backend call fails
+      }
+    };
+    loadBookings();
+  }, [currentUser]);
 
   const notify = (msg) => {
     setToast(msg);

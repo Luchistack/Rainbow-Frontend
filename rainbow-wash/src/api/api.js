@@ -10,13 +10,13 @@ const getAuthHeaders = () => {
 };
 
 // --- AUTH ---
-export const loginAdmin = async ({ name, role, password }) => {
+export const loginAdmin = async ({ email, password }) => {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, role, password }),
+    body: JSON.stringify({ email, password }),
   });
-  
+
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data.error || 'Failed to login');
@@ -24,10 +24,10 @@ export const loginAdmin = async ({ name, role, password }) => {
 
   localStorage.setItem('token', data.token);
   localStorage.setItem('authToken', data.token);
-  localStorage.setItem('userRole', role);
-  localStorage.setItem('userName', name);
+  localStorage.setItem('userRole', data.role);
+  localStorage.setItem('userName', data.name);
 
-  return data;
+  return data; // { token, role, name, message }
 };
 
 export const logoutUser = () => {
@@ -36,7 +36,35 @@ export const logoutUser = () => {
   localStorage.removeItem('userRole');
   localStorage.removeItem('userName');
 };
+export const changePassword = async ({ currentPassword, newPassword }) => {
+  const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to change password');
+  return data; // { message }
+};
 
+export const updateProduct = async (id, productData) => {
+  const response = await fetch(`${API_BASE_URL}/products/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(productData),
+  });
+  if (!response.ok) throw new Error('Failed to update product');
+  return await response.json();
+};
+
+export const deleteProduct = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/products/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Failed to delete product');
+  return true;
+};
 // --- CLEANING BOOKINGS ---
 export const createBooking = async (bookingData) => {
   const response = await fetch(`${API_BASE_URL}/bookings`, {
@@ -149,9 +177,26 @@ export const createEmployee = async (employeeData) => {
     headers: getAuthHeaders(),
     body: JSON.stringify(employeeData),
   });
+  const data = await response.json();
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || 'Failed to create employee');
+    throw new Error(data.error || 'Failed to create employee');
   }
-  return await response.text();
+  return data; // { message, email, tempPassword }
+};
+export const fetchEmployees = async () => {
+  const response = await fetch(`${API_BASE_URL}/admin/employees`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Failed to fetch employees');
+  return await response.json();
+};
+
+export const resetEmployeePassword = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/admin/reset-password/${id}`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to reset password');
+  return data; // { message, tempPassword }
 };

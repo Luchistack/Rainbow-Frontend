@@ -102,6 +102,7 @@ export default function BookCleaning() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [placed, setPlaced] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (svc?.sizes?.[0]?.id) {
@@ -128,7 +129,8 @@ export default function BookCleaning() {
       notify("Please add a phone number so we can reach you");
       return;
     }
-    const booking = {
+
+    const localBooking = {
       id: genRef("CLN"),
       service: svc.label,
       size: sizeObj?.label,
@@ -140,10 +142,18 @@ export default function BookCleaning() {
       status: "Pending Quote",
     };
 
+    setSubmitting(true);
+    let booking = localBooking;
+
     try {
-      await createBooking(booking);
+      const saved = await createBooking(localBooking);
+      // Use the backend's real reference so the number on screen matches Postgres
+      booking = { ...localBooking, id: saved.referenceId || localBooking.id };
     } catch (error) {
       console.error("Failed to sync booking to backend:", error);
+      notify("We couldn't save your booking to our system, please still send the WhatsApp message and mention this so our team can confirm manually.");
+    } finally {
+      setSubmitting(false);
     }
 
     setBookings((bs) => [booking, ...bs]);
@@ -262,8 +272,8 @@ export default function BookCleaning() {
                 Price will be confirmed via WhatsApp or a call before any payment is due, nothing is charged automatically.
               </p>
             </div>
-            <button className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} onClick={submit}>
-              <Wallet size={16} /> Request Booking
+            <button className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} onClick={submit} disabled={submitting}>
+              <Wallet size={16} /> {submitting ? "Sending..." : "Request Booking"}
             </button>
             <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 10 }}>
               A request opens in WhatsApp automatically so our team gets notified right away.
@@ -287,7 +297,7 @@ export default function BookCleaning() {
 
       <Testimonials kicker="Recent bookings" title="What customers say" items={BOOK_TESTIMONIALS} />
 
-      <FAQ kicker="Questions" title="Booking FAQ" items={BOOK_FAQ} />
+      <FAQ kicker="Booking FAQ" title="Booking FAQ" items={BOOK_FAQ} />
     </div>
   );
 }

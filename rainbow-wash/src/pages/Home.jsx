@@ -12,9 +12,9 @@ import washersPhoto from "../assets/feature-washers.jpg";
 const SERVICES_PREVIEW = [
   { icon: Shirt, color: "#27AAE1", title: "Self Wash", desc: "Bring your laundry and use our machines yourself at a discounted rate." },
   { icon: Sparkles, color: "#F7941D", title: "Washing & Ironing", desc: "Full wash, dry and press service, folded and ready to wear." },
-  { icon: Truck, color: "#39B54A", title: "Express Wash", desc: "Same-day turnaround for when you need it back in a hurry." },
+  { icon: Truck, color: "#39B54A", title: "Express Wash", desc: "Same day turnaround for when you need it back in a hurry." },
   { icon: HomeIcon, color: "#8E44AD", title: "Cleaning Services", desc: "Home, office and deep cleaning carried out by trained staff." },
-  { icon: Package, color: "#EF4136", title: "Upholstery", desc: "Sofas, chairs, car interiors and mattresses steam-cleaned on site." },
+  { icon: Package, color: "#EF4136", title: "Upholstery", desc: "Sofas, chairs, car interiors and mattresses steam cleaned on site." },
   { icon: Truck, color: "#4fb3e8", title: "Pickup & Delivery", desc: "We collect and return your laundry to your doorstep." },
 ];
 
@@ -26,8 +26,8 @@ const HOW_IT_WORKS = [
 ];
 
 const WHY_US = [
-  { icon: Clock, color: "#27AAE1", title: "Same-Day Express", desc: "Need it back today? Our express option has you covered." },
-  { icon: Wallet, color: "#F7941D", title: "Fair, Transparent Pricing", desc: "Priced by weight, just like on our in-store scale, no surprise charges." },
+  { icon: Clock, color: "#27AAE1", title: "Same Day Express", desc: "Need it back today? Our express option has you covered." },
+  { icon: Wallet, color: "#F7941D", title: "Fair, Transparent Pricing", desc: "Priced by weight, just like on our in store scale, no surprise charges." },
   { icon: ShieldCheck, color: "#39B54A", title: "Spotless Guarantee", desc: "Not happy with a wash or clean? We'll make it right, free of charge." },
   { icon: Smartphone, color: "#8E44AD", title: "Track From Your Phone", desc: "Real-time status updates from drop-off to doorstep delivery." },
 ];
@@ -47,7 +47,7 @@ export default function Home() {
         <div className="rw-section-head">
           <div className="rw-kicker">What we do</div>
           <h2>Everything your laundry needs, in one place</h2>
-          <p>From an everyday wash to full-home deep cleaning, pick a service and we'll handle the rest.</p>
+          <p>From an everyday wash to full home deep cleaning, pick a service and we'll handle the rest.</p>
         </div>
         <div className="rw-grid-3">
           {SERVICES_PREVIEW.map((s) => (
@@ -68,7 +68,7 @@ export default function Home() {
       <Steps
         kicker="How it works"
         title="Four steps from hamper to doorstep"
-        subtitle="Whether it's laundry, a full-home clean, or a shop order, the process is the same simple flow."
+        subtitle="Whether it's laundry, a full home clean, or a shop order, the process is the same simple flow."
         steps={HOW_IT_WORKS}
       />
 
@@ -77,9 +77,9 @@ export default function Home() {
         alt="Rainbow Wash laundromat with rows of washing machines"
         kicker="Inside the laundromat"
         title="Modern machines, careful hands"
-        text="Every load runs through commercial-grade washers and dryers, sorted by fabric and colour, and checked by staff before it's ever bagged for delivery."
+        text="Every load runs through commercial grade washers and dryers, sorted by fabric and colour, and checked by staff before it's ever bagged for delivery."
         points={[
-          "Fabric-safe detergents for delicates and colours",
+          "Fabric safe detergents for delicates and colours",
           "Machines cleaned and serviced regularly",
           "Every item logged against your order reference",
         ]}
