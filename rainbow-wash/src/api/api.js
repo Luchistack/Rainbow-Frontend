@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://rainbow-wash-backend-production.up.railway.app';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://rainbow-wash-backend-production.up.railway.app/api';
 
 // Helper function to get authorization headers
 const getAuthHeaders = () => {
