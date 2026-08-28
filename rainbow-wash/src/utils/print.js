@@ -1,5 +1,5 @@
 import { money } from "./format";
-import { BUSINESS_INFO, VAT_RATE } from "../data/constants";
+import { BUSINESS_INFO, VAT_RATE, DELIVERY_FEE } from "../data/constants";
 
 function rowsForOrder(order, subtotal) {
   if (order.items && order.items.length) {
@@ -19,10 +19,14 @@ function rowsForOrder(order, subtotal) {
 // of ₦130,000, when nothing extra was ever actually charged).
 function computeTotals(order) {
   if (order.items && order.items.length) {
+    // Always computed fresh from the real line items — never trusts a stored
+    // `order.total` blindly. That was the actual bug: a walk-in order's total
+    // had been saved without VAT ever added to it, so the receipt was just
+    // faithfully repeating a wrong number instead of getting it right.
     const itemsSubtotal = order.items.reduce((s, i) => s + i.qty * i.price, 0);
     const vat = itemsSubtotal * VAT_RATE;
-    const total = order.total ?? itemsSubtotal + vat;
-    const other = Math.max(0, total - itemsSubtotal - vat); // delivery fee, if any
+    const other = order.fulfilment === "pickup" ? DELIVERY_FEE : 0;
+    const total = itemsSubtotal + vat + other;
     return { subtotal: itemsSubtotal, vat, other, total };
   }
   // Cleaning bookings: no item list, just a single confirmed/negotiated price.
@@ -274,72 +278,117 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       var d = PDF_DATA;
       var jsPDFCtor = window.jspdf.jsPDF;
       var doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
-      var left = 40, y = 50;
+      var pageW = 595, left = 40, right = 555, contentW = right - left;
+      var rainbow = [[239,65,54],[247,148,29],[255,206,51],[57,181,74],[39,170,225],[142,68,173]];
+      var accentBlue = [39, 170, 225];
+      var y = 0;
 
-      doc.setFontSize(16); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
-      doc.text(d.bizName, left, y);
-      doc.setFontSize(9); doc.setTextColor(85, 85, 85); doc.setFont(undefined, 'normal');
-      doc.text(d.contactLine, 555, y - 10, { align: 'right' });
-      doc.text(d.email, 555, y + 4, { align: 'right' });
-
-      y += 34;
-      doc.setFontSize(18); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
-      doc.text('Service Receipt / Slip', left, y);
-
-      y += 26;
-      doc.setFontSize(10); doc.setTextColor(20, 20, 20); doc.setFont(undefined, 'normal');
-      doc.text('Bill To: ' + d.billTo, left, y);
-      doc.text('Ref: ' + d.ref, 555, y, { align: 'right' });
-      y += 14;
-      doc.text(d.phone, left, y);
-      doc.text('Date: ' + d.date, 555, y, { align: 'right' });
-      y += 14;
-      doc.text('Status: ' + d.status, 555, y, { align: 'right' });
-
-      y += 26;
-      doc.setFillColor(234, 244, 251);
-      doc.rect(left, y - 12, 515, 20, 'F');
-      doc.setFontSize(9); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
-      doc.text('DESCRIPTION', left + 6, y + 2);
-      doc.text('QTY', 330, y + 2);
-      doc.text('UNIT PRICE', 400, y + 2);
-      doc.text('AMOUNT', 500, y + 2);
-      y += 20;
-
-      doc.setFont(undefined, 'normal'); doc.setTextColor(20, 20, 20);
-      d.items.forEach(function (r) {
-        doc.text(String(r.desc).slice(0, 48), left + 6, y);
-        doc.text(String(r.qty), 330, y);
-        doc.text(String(r.unitPrice), 400, y);
-        doc.text(String(r.amount), 500, y);
-        y += 18;
-        doc.setDrawColor(230, 230, 230);
-        doc.line(left, y - 6, 555, y - 6);
+      // Rainbow stripe across the very top of the page
+      var stripeW = pageW / rainbow.length;
+      rainbow.forEach(function (rgb, i) {
+        doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+        doc.rect(i * stripeW, 0, stripeW + 1, 6, 'F');
       });
 
-      y += 14;
-      var totalsX = 380;
-      doc.text('Subtotal', totalsX, y);
-      doc.text(d.subtotal, 555, y, { align: 'right' });
-      y += 16;
-      doc.text(d.vatLabel, totalsX, y);
-      doc.text(d.vat, 555, y, { align: 'right' });
-      y += 16;
-      if (d.other) {
-        doc.text('Delivery / Other', totalsX, y);
-        doc.text(d.other, 555, y, { align: 'right' });
-        y += 16;
-      }
-      doc.setDrawColor(12, 63, 102); doc.line(totalsX, y - 4, 555, y - 4);
-      y += 12;
-      doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.setTextColor(12, 63, 102);
-      doc.text('Total', totalsX, y);
-      doc.text(d.total, 555, y, { align: 'right' });
+      y = 42;
+      doc.setFontSize(16); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
+      doc.text(d.bizName, left, y, { maxWidth: 300 });
+      doc.setFontSize(9); doc.setTextColor(85, 85, 85); doc.setFont(undefined, 'normal');
+      doc.text(d.contactLine, right, y - 10, { align: 'right' });
+      doc.text(d.email, right, y + 4, { align: 'right' });
 
-      y += 50;
+      y += 36;
+      doc.setDrawColor(221, 231, 240); doc.setLineWidth(1);
+      doc.line(left, y, right, y);
+
+      y += 32;
+      doc.setFontSize(19); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
+      doc.text('Service Receipt / Slip', left, y);
+
+      // Bill-to / meta box, ice background with a blue left accent bar
+      y += 16;
+      var metaH = 58;
+      doc.setFillColor(244, 248, 251);
+      doc.roundedRect(left, y, contentW, metaH, 6, 6, 'F');
+      doc.setFillColor(accentBlue[0], accentBlue[1], accentBlue[2]);
+      doc.rect(left, y, 4, metaH, 'F');
+
+      doc.setFontSize(9.5); doc.setTextColor(76, 96, 121); doc.setFont(undefined, 'bold');
+      doc.text('BILL TO', left + 16, y + 18);
+      doc.text('REF', right - 140, y + 18);
+      doc.setFont(undefined, 'normal'); doc.setTextColor(20, 20, 20); doc.setFontSize(10.5);
+      doc.text(d.billTo, left + 16, y + 33);
+      doc.text(d.phone, left + 16, y + 47);
+      doc.setFont(undefined, 'bold'); doc.text(d.ref, right - 140, y + 33);
+      doc.setFont(undefined, 'normal');
+      doc.text('Date: ' + d.date, right - 140, y + 47);
+      doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
+      doc.text('Status: ' + d.status, right - 16, y + 18, { align: 'right' });
+
+      y += metaH + 26;
+
+      // Table header
+      var colQty = right - 190, colUnit = right - 115, colAmt = right;
+      doc.setFillColor(234, 244, 251);
+      doc.rect(left, y - 14, contentW, 22, 'F');
+      doc.setFontSize(9); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
+      doc.text('DESCRIPTION', left + 8, y + 1);
+      doc.text('QTY', colQty, y + 1, { align: 'center' });
+      doc.text('UNIT PRICE', colUnit, y + 1, { align: 'right' });
+      doc.text('AMOUNT', colAmt, y + 1, { align: 'right' });
+      y += 20;
+
+      doc.setFont(undefined, 'normal'); doc.setFontSize(9.5); doc.setTextColor(30, 30, 30);
+      d.items.forEach(function (r, idx) {
+        var rowH = 22;
+        if (idx % 2 === 1) {
+          doc.setFillColor(249, 251, 253);
+          doc.rect(left, y - 15, contentW, rowH, 'F');
+        }
+        doc.setTextColor(30, 30, 30);
+        doc.text(String(r.desc).slice(0, 52), left + 8, y);
+        doc.text(String(r.qty), colQty, y, { align: 'center' });
+        doc.text(String(r.unitPrice), colUnit, y, { align: 'right' });
+        doc.text(String(r.amount), colAmt, y, { align: 'right' });
+        y += rowH;
+      });
+      doc.setDrawColor(221, 231, 240);
+      doc.line(left, y - 15, right, y - 15);
+
+      // Totals box, right-aligned, boxed
+      y += 14;
+      var boxW = 220, boxX = right - boxW;
+      var lineCount = d.other ? 4 : 3;
+      var boxH = lineCount * 20 + 16;
+      doc.setFillColor(244, 248, 251);
+      doc.roundedRect(boxX, y, boxW, boxH, 6, 6, 'F');
+
+      var ty = y + 20;
+      doc.setFontSize(10); doc.setTextColor(76, 96, 121); doc.setFont(undefined, 'normal');
+      doc.text('Subtotal', boxX + 14, ty);
+      doc.text(d.subtotal, right - 14, ty, { align: 'right' });
+      ty += 20;
+      doc.text(d.vatLabel, boxX + 14, ty);
+      doc.text(d.vat, right - 14, ty, { align: 'right' });
+      ty += 20;
+      if (d.other) {
+        doc.text('Delivery / Other', boxX + 14, ty);
+        doc.text(d.other, right - 14, ty, { align: 'right' });
+        ty += 20;
+      }
+      doc.setDrawColor(12, 63, 102); doc.setLineWidth(1.2);
+      doc.line(boxX + 14, ty - 6, right - 14, ty - 6);
+      ty += 12;
+      doc.setFontSize(13.5); doc.setFont(undefined, 'bold'); doc.setTextColor(12, 63, 102);
+      doc.text('Total', boxX + 14, ty);
+      doc.text(d.total, right - 14, ty, { align: 'right' });
+
+      y = y + boxH + 60;
+      doc.setDrawColor(221, 221, 221); doc.setLineWidth(0.75);
+      doc.line(left, y - 14, right, y - 14);
       doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(120, 120, 120);
       doc.text('Printed by: ' + d.printedBy, left, y);
-      doc.text(d.printedAt, 555, y, { align: 'right' });
+      doc.text(d.printedAt, right, y, { align: 'right' });
 
       return doc;
     }

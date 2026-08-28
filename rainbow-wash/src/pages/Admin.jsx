@@ -5,7 +5,7 @@ import {
   Zap, ChevronDown, ChevronUp, X,
 } from "lucide-react";
 import {
-  TRACK_STAGES, PAYMENT_STATUSES, ADDON_GROUPS, DELIVERY_FEE,
+  TRACK_STAGES, PAYMENT_STATUSES, PAYMENT_METHODS, ADDON_GROUPS, DELIVERY_FEE, VAT_RATE,
 } from "../data/constants";
 import { money, formatPlacedAt, matchesRange, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
@@ -36,7 +36,7 @@ export default function Admin() {
     dryCleanItems, setDryCleanItems, shoeCareItems, setShoeCareItems,
     addonProducts, setAddonProducts, expressServices, setExpressServices,
     cleaningServices,
-    currentUser, setCurrentUser,
+    currentUser, setCurrentUser, refreshAll,
     notify,
   } = useApp();
 
@@ -290,6 +290,7 @@ export default function Admin() {
   const updateOrderStatus = (id, status) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o))); persistOrder(id, { status }); };
   const updateOrderTotal = (id, total) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, total: Number(total) } : o))); persistOrder(id, { total: Number(total) }); };
   const updateOrderPayment = (id, paymentStatus) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentStatus } : o))); persistOrder(id, { paymentStatus }); };
+  const updateOrderMethod = (id, paymentMethod) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentMethod } : o))); persistOrder(id, { paymentMethod }); };
 
   const persistBookingUpdate = (id, patch) => {
     const target = bookings.find((b) => b.id === id);
@@ -299,6 +300,7 @@ export default function Admin() {
   const updateBookingStatus = (id, status) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status } : b))); persistBookingUpdate(id, { status }); };
   const updateBookingPayable = (id, payable) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, payable: Number(payable) } : b))); persistBookingUpdate(id, { payable: Number(payable) }); };
   const updateBookingPayment = (id, paymentStatus) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, paymentStatus } : b))); persistBookingUpdate(id, { paymentStatus }); };
+  const updateBookingMethod = (id, paymentMethod) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, paymentMethod } : b))); persistBookingUpdate(id, { paymentMethod }); };
 
   const persistShopOrder = (id, patch) => {
     const target = shopOrders.find((o) => o.id === id);
@@ -307,6 +309,7 @@ export default function Admin() {
   };
   const updateShopOrderStatus = (id, status) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o))); persistShopOrder(id, { status }); };
   const updateShopPayment = (id, paymentStatus) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentStatus } : o))); persistShopOrder(id, { paymentStatus }); };
+  const updateShopMethod = (id, paymentMethod) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentMethod } : o))); persistShopOrder(id, { paymentMethod }); };
 
   // --- Inventory: local field edits (as-you-type, no network call) ---
   const updateProductField = (id, field, value) => {
@@ -577,10 +580,6 @@ export default function Admin() {
   const openDraft = (type) => {
     resetDraft();
     setDraftType(type);
-    if (type === "cleaning" && cleaningServices?.length) {
-      setDraftServiceId(cleaningServices[0].id);
-      setDraftSizeId(cleaningServices[0].sizes[0].id);
-    }
     if (type === "shop" && products?.length) setDraftProductId(products[0].id);
     if (selfWashRates?.length) setDraftWashRateId(selfWashRates[0].id);
     if (dryCleanItems?.length) setDraftDcItemId(dryCleanItems[0].id);
@@ -628,7 +627,9 @@ export default function Admin() {
   };
 
   const draftSubtotal = draftItems.reduce((s, i) => s + i.qty * i.price, 0);
-  const draftTotal = draftType === "laundry" && draftFulfilment === "pickup" ? draftSubtotal + DELIVERY_FEE : draftSubtotal;
+  const draftVat = draftSubtotal * VAT_RATE;
+  const draftTotal = draftSubtotal + draftVat + (draftType === "laundry" && draftFulfilment === "pickup" ? DELIVERY_FEE : 0);
+  const draftShopTotal = draftSubtotal + draftVat; // shop checkout has no delivery-fee concept, just VAT on top
 
   const placeDraftLaundryOrder = async () => {
     if (draftItems.length === 0) { notify("Add at least one item first"); return; }
@@ -661,17 +662,16 @@ export default function Admin() {
 
   const placeDraftBooking = async () => {
     if (!draftFullName.trim() || !draftPhone.trim()) { notify("Name and phone are required"); return; }
-    const svc = cleaningServices.find((s) => s.id === draftServiceId);
-    const size = svc?.sizes.find((s) => s.id === draftSizeId);
-    const payable = draftPayable === "" ? size?.price || 0 : Number(draftPayable);
+    if (!draftServiceId.trim()) { notify("Please enter a service"); return; }
+    const payable = draftPayable === "" ? 0 : Number(draftPayable);
     setPlacingDraft(true);
     try {
       const localBooking = {
         id: genRef("CLN"),
-        service: svc?.label || "", size: size?.label || "",
+        service: draftServiceId.trim(), size: draftSizeId.trim(),
         date: draftBookingDate, time: draftBookingTime, address: draftAddress,
         fullName: draftFullName.trim(), phone: draftPhone.trim(), email: "",
-        price: size?.price || 0, payType: "full", payable,
+        price: payable, payType: "full", payable,
         paymentStatus: "Pending", status: "Confirmed",
         placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
       };
@@ -691,7 +691,7 @@ export default function Admin() {
       id: genRef("SHOP"),
       items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
       fullName: draftFullName.trim(), phone: draftPhone.trim(), mode: draftMode,
-      total: draftSubtotal, status: "Received", paymentStatus: "Pending",
+      total: draftShopTotal, status: "Received", paymentStatus: "Pending",
       placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
     };
     setPlacingDraft(true);
@@ -699,7 +699,7 @@ export default function Admin() {
       const saved = await createShopOrder({
         items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
         fullName: draftFullName.trim(), phone: draftPhone.trim(), mode: draftMode,
-        total: draftSubtotal, createdBy: currentUser?.name,
+        total: draftShopTotal, createdBy: currentUser?.name,
       }).catch(() => localOrder);
       setShopOrders((os) => [saved || localOrder, ...os]);
       notify(`Walk-in sale ${(saved || localOrder).id} placed`);
@@ -782,6 +782,12 @@ export default function Admin() {
             <div style={{ fontSize: 11.5, color: "#a9c3db" }}>{currentUser.role}</div>
           </div>
         </div>
+        <button
+          onClick={async () => { notify("Refreshing…"); const ok = await refreshAll(); notify(ok ? "Up to date" : "Couldn't reach the server, showing last known data"); }}
+          style={{ marginBottom: 6 }}
+        >
+          <RefreshCw size={16} /> Refresh Now
+        </button>
         {NAV.map((n) => (
           <button key={n.id} className={tab === n.id ? "active" : ""} onClick={() => setTab(n.id)}><n.icon size={16} /> {n.label}</button>
         ))}
@@ -813,8 +819,7 @@ export default function Admin() {
             </p>
           </div>
         )}
-
-        {tab === "orders" && (
+                {tab === "orders" && (
           <div>
             <div className="rw-admin-panel-head">
               <div>
@@ -837,9 +842,9 @@ export default function Admin() {
               <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
                 <h3 style={{ fontSize: 15, marginBottom: 12 }}>Walk-In Laundry Order — Draft</h3>
                 <div className="rw-pill-group" style={{ marginBottom: 14 }}>
-                  {["selfwash", "staffwash", "dryclean", "shoecare", "express"].map((c) => (
+                  {["selfwash", "staffwash", "dryclean", "shoecare", "express", "shop"].map((c) => (
                     <button key={c} className={`rw-pill ${draftCategory === c ? "active" : ""}`} onClick={() => setDraftCategory(c)}>
-                      {{ selfwash: "Self Wash", staffwash: "Staff Wash", dryclean: "Dry Cleaning", shoecare: "Shoe Care", express: "Express" }[c]}
+                      {{ selfwash: "Self Wash", staffwash: "Staff Wash", dryclean: "Dry Cleaning", shoecare: "Shoe Care", express: "Express", shop: "Shop Products" }[c]}
                     </button>
                   ))}
                 </div>
@@ -925,6 +930,22 @@ export default function Admin() {
                   </div>
                 )}
 
+                {draftCategory === "shop" && (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+                    <div style={{ flex: "1 1 220px" }}>
+                      <label>Shop product</label>
+                      <select value={draftProductId} onChange={(e) => setDraftProductId(e.target.value)}>
+                        {products.filter((p) => (p.status || "Active") === "Active").map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label>Qty</label>
+                      <input type="number" min="1" style={{ width: 70 }} value={draftProductQty} onChange={(e) => setDraftProductQty(Number(e.target.value))} />
+                    </div>
+                    <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftProductLine}><Plus size={13} /> Add</button>
+                  </div>
+                )}
+
                 {draftItems.length > 0 && (
                   <div style={{ marginBottom: 14 }}>
                     {draftItems.map((i) => (
@@ -952,6 +973,9 @@ export default function Admin() {
                 )}
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
+                  <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+                    Subtotal {money(draftSubtotal)} + VAT ({VAT_RATE * 100}%) {money(draftVat)}
+                  </div>
                   <b style={{ fontSize: 15 }}>Total: {money(draftTotal)}</b>
                   <button className="rw-btn rw-btn-rainbow" onClick={placeDraftLaundryOrder}>Place Order</button>
                 </div>
@@ -959,7 +983,7 @@ export default function Admin() {
             )}
 
             <table className="rw-table">
-              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Items</th><th>Fulfilment</th><th>Phone</th><th>Email</th><th>Total (₦)</th><th>Status</th><th>Payment</th><th></th></tr></thead>
+              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Items</th><th>Fulfilment</th><th>Phone</th><th>Email</th><th>Total (₦)</th><th>Status</th><th>Method</th><th>Payment</th><th></th></tr></thead>
               <tbody>
                 {todaysOrders.map((o) => (
                   <tr key={o.id}>
@@ -983,6 +1007,11 @@ export default function Admin() {
                       </select>
                     </td>
                     <td>
+                      <select className="rw-status-select" value={o.paymentMethod || "Transfer"} onChange={(e) => updateOrderMethod(o.id, e.target.value)}>
+                        {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </td>
+                    <td>
                       <select className="rw-status-select" value={o.paymentStatus || "Pending"} onChange={(e) => updateOrderPayment(o.id, e.target.value)}>
                         {PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -996,7 +1025,7 @@ export default function Admin() {
                   </tr>
                 ))}
                 {todaysOrders.length === 0 && (
-                  <tr><td colSpan={11} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No laundry orders placed today yet.</td></tr>
+                  <tr><td colSpan={12} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No laundry orders placed today yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -1014,11 +1043,6 @@ export default function Admin() {
                 <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "cleaning" ? null : "cleaning")}>
                   {draftType === "cleaning" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Booking</>}
                 </button>
-                {canClearLists && todaysBookings.length > 0 && (
-                  <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysBookings}>
-                    <RefreshCw size={14} /> Clear list
-                  </button>
-                )}
               </div>
             </div>
 
@@ -1028,24 +1052,11 @@ export default function Admin() {
                 <div className="rw-form-grid" style={{ marginBottom: 12 }}>
                   <div>
                     <label>Service</label>
-                    <select
-                      value={draftServiceId}
-                      onChange={(e) => {
-                        setDraftServiceId(e.target.value);
-                        const svc = cleaningServices.find((s) => s.id === e.target.value);
-                        if (svc) setDraftSizeId(svc.sizes[0].id);
-                      }}
-                    >
-                      {cleaningServices.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                    </select>
+                    <input placeholder="e.g. Home Cleaning" value={draftServiceId} onChange={(e) => setDraftServiceId(e.target.value)} />
                   </div>
                   <div>
-                    <label>Size</label>
-                    <select value={draftSizeId} onChange={(e) => setDraftSizeId(e.target.value)}>
-                      {(cleaningServices.find((s) => s.id === draftServiceId)?.sizes || []).map((sz) => (
-                        <option key={sz.id} value={sz.id}>{sz.label}, {money(sz.price)}</option>
-                      ))}
-                    </select>
+                    <label>Size / scope</label>
+                    <input placeholder="e.g. 3 - 4 Bedrooms" value={draftSizeId} onChange={(e) => setDraftSizeId(e.target.value)} />
                   </div>
                   <div><label>Date</label><input type="date" value={draftBookingDate} onChange={(e) => setDraftBookingDate(e.target.value)} /></div>
                   <div><label>Time</label><input type="time" value={draftBookingTime} onChange={(e) => setDraftBookingTime(e.target.value)} /></div>
@@ -1054,12 +1065,7 @@ export default function Admin() {
                   <div style={{ gridColumn: "1 / -1" }}><label>Address</label><input value={draftAddress} onChange={(e) => setDraftAddress(e.target.value)} /></div>
                   <div>
                     <label>Confirmed price (₦)</label>
-                    <input
-                      type="number" step="500"
-                      placeholder={String(cleaningServices.find((s) => s.id === draftServiceId)?.sizes.find((sz) => sz.id === draftSizeId)?.price || 0)}
-                      value={draftPayable}
-                      onChange={(e) => setDraftPayable(e.target.value)}
-                    />
+                    <input type="number" step="500" placeholder="0" value={draftPayable} onChange={(e) => setDraftPayable(e.target.value)} />
                   </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -1071,7 +1077,7 @@ export default function Admin() {
             )}
 
             <table className="rw-table">
-              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Service</th><th>Size</th><th>Date</th><th>Phone</th><th>Confirmed Price (₦)</th><th>Status</th><th>Payment</th><th></th></tr></thead>
+              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Service</th><th>Size</th><th>Date</th><th>Phone</th><th>Confirmed Price (₦)</th><th>Status</th><th>Method</th><th>Payment</th><th></th></tr></thead>
               <tbody>
                 {todaysBookings.map((b) => (
                   <tr key={b.id}>
@@ -1095,6 +1101,11 @@ export default function Admin() {
                       </select>
                     </td>
                     <td>
+                      <select className="rw-status-select" value={b.paymentMethod || "Transfer"} onChange={(e) => updateBookingMethod(b.id, e.target.value)}>
+                        {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </td>
+                    <td>
                       <select className="rw-status-select" value={b.paymentStatus || "Pending"} onChange={(e) => updateBookingPayment(b.id, e.target.value)}>
                         {PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -1108,7 +1119,7 @@ export default function Admin() {
                   </tr>
                 ))}
                 {todaysBookings.length === 0 && (
-                  <tr><td colSpan={11} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No bookings requested today yet.</td></tr>
+                  <tr><td colSpan={12} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No bookings requested today yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -1175,14 +1186,17 @@ export default function Admin() {
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <b style={{ fontSize: 15 }}>Total: {money(draftSubtotal)}</b>
+                  <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+                    Subtotal {money(draftSubtotal)} + VAT ({VAT_RATE * 100}%) {money(draftVat)}
+                  </div>
+                  <b style={{ fontSize: 15 }}>Total: {money(draftShopTotal)}</b>
                   <button className="rw-btn rw-btn-rainbow" onClick={placeDraftShopOrder}>Place Order</button>
                 </div>
               </div>
             )}
 
             <table className="rw-table">
-              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Items</th><th>Fulfilment</th><th>Phone</th><th>Total</th><th>Status</th><th>Payment</th><th></th></tr></thead>
+              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Items</th><th>Fulfilment</th><th>Phone</th><th>Total</th><th>Status</th><th>Method</th><th>Payment</th><th></th></tr></thead>
               <tbody>
                 {todaysShopOrders.map((o) => (
                   <tr key={o.id}>
@@ -1199,6 +1213,11 @@ export default function Admin() {
                       </select>
                     </td>
                     <td>
+                      <select className="rw-status-select" value={o.paymentMethod || "Transfer"} onChange={(e) => updateShopMethod(o.id, e.target.value)}>
+                        {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </td>
+                    <td>
                       <select className="rw-status-select" value={o.paymentStatus || "Pending"} onChange={(e) => updateShopPayment(o.id, e.target.value)}>
                         {PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -1212,7 +1231,7 @@ export default function Admin() {
                   </tr>
                 ))}
                 {todaysShopOrders.length === 0 && (
-                  <tr><td colSpan={10} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No shop orders placed today yet.</td></tr>
+                  <tr><td colSpan={11} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No shop orders placed today yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -1265,8 +1284,7 @@ export default function Admin() {
             </table>
           </div>
         )}
-
-        {tab === "inventory" && canEditPricing && (
+                {tab === "inventory" && canEditPricing && (
           <div>
             <div className="rw-admin-panel-head"><h2>Inventory</h2></div>
 

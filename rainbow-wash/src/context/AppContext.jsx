@@ -169,39 +169,50 @@ export function AppProvider({ children }) {
           setBookings(data);
         }
       } catch (error) {
-        // Falls back to whatever's in localStorage if the backend call fails
+        // Falls back to whatever's already loaded if the backend call fails
       }
     };
     loadBookings();
+    const interval = setInterval(loadBookings, 20000);
+    return () => clearInterval(interval);
   }, [currentUser]);
 
   // Fetch real laundry orders and shop orders from the backend once staff are
-  // logged in — same reasoning as bookings above: GET requires a JWT, so these
-  // only fire after a successful staff/manager/admin login.
+  // logged in, and keep re-fetching every 20 seconds while the dashboard is
+  // open. This is what makes an order placed by one staff member (or a
+  // customer on the public site) show up for everyone else without them
+  // having to log out and back in — a real-time WebSocket feed would be the
+  // "proper" version of this, but polling every 20s gets the same practical
+  // result with far less to build and maintain right now.
   useEffect(() => {
     if (!currentUser) return;
+
     const loadOrders = async () => {
       try {
         const data = await fetchOrders();
         if (data) setLaundryOrders(data);
       } catch (error) {
-        // Falls back to whatever's in localStorage if the backend call fails
+        // Falls back to whatever's already loaded if the backend call fails
       }
     };
-    loadOrders();
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (!currentUser) return;
     const loadShopOrders = async () => {
       try {
         const data = await fetchShopOrders();
         if (data) setShopOrders(data);
       } catch (error) {
-        // Falls back to whatever's in localStorage if the backend call fails
+        // Falls back to whatever's already loaded if the backend call fails
       }
     };
+
+    loadOrders();
     loadShopOrders();
+
+    const interval = setInterval(() => {
+      loadOrders();
+      loadShopOrders();
+    }, 20000);
+
+    return () => clearInterval(interval);
   }, [currentUser]);
 
   const notify = (msg) => {
@@ -209,9 +220,20 @@ export function AppProvider({ children }) {
     setTimeout(() => setToast(""), 3200);
   };
 
+  // On-demand sync — lets a staff member pull the latest orders/bookings/shop
+  // orders right now instead of waiting for the 20-second background refresh.
+  const refreshAll = async () => {
+    const results = await Promise.allSettled([fetchOrders(), fetchBookings(), fetchShopOrders()]);
+    if (results[0].status === "fulfilled" && results[0].value) setLaundryOrders(results[0].value);
+    if (results[1].status === "fulfilled" && results[1].value) setBookings(results[1].value);
+    if (results[2].status === "fulfilled" && results[2].value) setShopOrders(results[2].value);
+    return results.every((r) => r.status === "fulfilled");
+  };
+
   const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart]);
 
   const value = {
+    refreshAll,
     cart, setCart, cartCount,
     toast, notify,
     products, setProducts,

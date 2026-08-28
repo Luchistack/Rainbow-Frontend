@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   CheckCircle2, Minus, Plus, Truck, CreditCard, Phone, Mail, User,
-  Shirt, Users, Sparkles, Package, ShoppingBag, Trash2, Landmark, Copy, Zap,
+  Shirt, Users, Sparkles, Package, ShoppingBag, Trash2, Landmark, Copy, Zap, Store,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import FAQ from "../components/FAQ";
@@ -20,6 +20,7 @@ const CATEGORIES = [
   { id: "shoecare", label: "Shoe & Leather Care", icon: Package },
   { id: "express", label: "Express", icon: Zap },
   { id: "extras", label: "Add Extras", icon: ShoppingBag },
+  { id: "shop", label: "Shop Products", icon: Store },
 ];
 
 const TURNAROUND = [
@@ -58,7 +59,7 @@ function buildReceipt(order) {
 }
 
 export default function OrderLaundry() {
-  const { setLaundryOrders, notify, selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, expressServices } = useApp();
+  const { setLaundryOrders, notify, selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, expressServices, products } = useApp();
 
   const [category, setCategory] = useState("selfwash");
   const [items, setItems] = useState([]);
@@ -159,7 +160,7 @@ export default function OrderLaundry() {
       id: genRef("LND"),
       items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, unit: i.unit })),
       fulfilment, address, date, time, payment, transferNote,
-      paymentStatus: payment === "bank" && transferSent ? "Sent" : "Pending",
+      paymentStatus: payment === "bank" && transferSent ? "Received" : "Pending",
       fullName, phone, email,
       placedAt: new Date().toISOString(),
       archived: false,
@@ -374,6 +375,27 @@ export default function OrderLaundry() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {category === "shop" && (
+                <div>
+                  <p style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 14 }}>
+                    Add detergents, bags and other products from our shop, delivered together with your laundry, one order, one payment.
+                  </p>
+                  <div className="rw-grid-2">
+                    {products.filter((p) => (p.status || "Active") === "Active").map((p) => (
+                      <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
+                          <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>{money(p.price)}</div>
+                        </div>
+                        <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => addItem(p.name, 1, p.price, "")}>
+                          <Plus size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
