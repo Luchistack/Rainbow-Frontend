@@ -2,7 +2,7 @@ import { useState } from "react";
 import { X, Package, Minus, Plus, Trash2, CreditCard, User } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { money, genRef } from "../utils/format";
-import { buildWhatsAppLink } from "../data/constants";
+import { buildWhatsAppLink, VAT_RATE } from "../data/constants";
 import { createShopOrder } from "../api/api";
 
 function buildReceipt(order) {
@@ -27,7 +27,7 @@ export default function CartDrawer({ open, onClose }) {
   const [phone, setPhone] = useState("");
   
   const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const tax = subtotal * 0.075;
+  const tax = subtotal * VAT_RATE;
   const total = subtotal + tax;
 
   const updateQty = (id, delta) => {

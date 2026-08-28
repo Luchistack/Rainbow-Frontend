@@ -160,6 +160,9 @@ export const WHATSAPP_NUMBER = "2348136920900"; // ⚠️ double-check this — 
 export const buildWhatsAppLink = (message) => `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 
 export const DELIVERY_FEE = 2500;
+// Applied to every order/booking's item subtotal, always ADDED on top (never
+// backed out of a stored total) — 7.5% is Nigeria's standard VAT rate.
+export const VAT_RATE = 0.075;
 export const DELIVERY_COVERAGE_NOTE = "Currently covers the Maryland area only, other areas of Lagos may incur an additional fee, confirmed before you pay.";
 
 export const MAPS_ADDRESS = "Rainbow Wash, 10 Prince Bode Oluwo Street, Mende, opposite Mende Town Hall, Maryland, Lagos";

@@ -7,7 +7,7 @@ import {
 import {
   TRACK_STAGES, PAYMENT_STATUSES, ADDON_GROUPS, DELIVERY_FEE,
 } from "../data/constants";
-import { money, formatPlacedAt, isToday, matchesRange, genRef } from "../utils/format";
+import { money, formatPlacedAt, matchesRange, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
 import { openPrintSlip } from "../utils/print";
 import {
@@ -24,6 +24,7 @@ const RANGES = [
   { id: "month", label: "This Month" },
   { id: "year", label: "This Year" },
   { id: "all", label: "All Time" },
+  { id: "custom", label: "Pick a date" },
 ];
 const BOOKING_STAGES = ["Pending Quote", "Confirmed", "Completed", "Cancelled"];
 
@@ -49,6 +50,9 @@ export default function Admin() {
   const canSeeOverview = role === "Admin";
   const canSeeReports = role === "Admin";
   const canEditPricing = role === "Manager" || role === "Admin";
+  // Only Manager/Admin can clear the active lists (per the PRD: Staff must
+  // never be able to make orders/bookings disappear from the working view).
+  const canClearLists = role === "Manager" || role === "Admin";
 
   const defaultTab = canSeeOverview ? "overview" : "orders";
   const [tab, setTab] = useState(defaultTab);
@@ -131,6 +135,7 @@ export default function Admin() {
 
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyRange, setHistoryRange] = useState("week");
+  const [historyDate, setHistoryDate] = useState(""); // used only when historyRange === "custom"
   const [reportsRange, setReportsRange] = useState("month");
 
   // Turns the backend's "ADMIN" / "MANAGER" / "STAFF" (Java enum .name()) into the
@@ -260,9 +265,13 @@ export default function Admin() {
 
   const lowStock = products.filter((p) => p.stock <= 5).length;
 
-  const todaysOrders = laundryOrders.filter((o) => !o.archived && isToday(o.placedAt));
-  const todaysBookings = bookings.filter((b) => !b.archived && isToday(b.placedAt));
-  const todaysShopOrders = shopOrders.filter((o) => !o.archived && isToday(o.placedAt));
+  // Orders/bookings stay visible here until a Manager/Admin explicitly clears
+  // them (not auto-filtered by date) — that was the earlier bug: as soon as
+  // the calendar day rolled over, yesterday's still-open orders would silently
+  // vanish from this list even though nothing had actually been done with them.
+  const todaysOrders = laundryOrders.filter((o) => !o.archived);
+  const todaysBookings = bookings.filter((b) => !b.archived);
+  const todaysShopOrders = shopOrders.filter((o) => !o.archived);
 
   const revenueToday =
     todaysOrders.reduce((s, o) => s + o.total, 0) +
@@ -349,9 +358,11 @@ export default function Admin() {
   const archiveBooking = (id) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, archived: true } : b))); persistBookingUpdate(id, { archived: true }); };
   const archiveShopOrder = (id) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, archived: true } : o))); persistShopOrder(id, { archived: true }); };
 
-  const clearTodaysOrders = () => setLaundryOrders((os) => os.map((o) => (!o.archived && isToday(o.placedAt) ? { ...o, archived: true } : o)));
-  const clearTodaysBookings = () => setBookings((bs) => bs.map((b) => (!b.archived && isToday(b.placedAt) ? { ...b, archived: true } : b)));
-  const clearTodaysShopOrders = () => setShopOrders((os) => os.map((o) => (!o.archived && isToday(o.placedAt) ? { ...o, archived: true } : o)));
+  // Manual clearing only — Manager/Admin decide when to archive everything
+  // currently open (typically at the start of a new day), Staff cannot.
+  const clearTodaysOrders = () => setLaundryOrders((os) => os.map((o) => (!o.archived ? { ...o, archived: true } : o)));
+  const clearTodaysBookings = () => setBookings((bs) => bs.map((b) => (!b.archived ? { ...b, archived: true } : b)));
+  const clearTodaysShopOrders = () => setShopOrders((os) => os.map((o) => (!o.archived ? { ...o, archived: true } : o)));
   const startNewDay = () => {
     clearTodaysOrders();
     clearTodaysBookings();
@@ -713,7 +724,15 @@ export default function Admin() {
       details: o.items.map((i) => `${i.name} ×${i.qty}`).join(", "), total: o.total, status: o.status, paymentStatus: o.paymentStatus,
     })),
   ]
-    .filter((r) => matchesRange(r.placedAt, historyRange))
+    .filter((r) => {
+      if (historyRange === "custom") {
+        if (!historyDate || !r.placedAt) return false;
+        const d = new Date(r.placedAt);
+        const picked = new Date(historyDate + "T00:00:00");
+        return d.getFullYear() === picked.getFullYear() && d.getMonth() === picked.getMonth() && d.getDate() === picked.getDate();
+      }
+      return matchesRange(r.placedAt, historyRange);
+    })
     .filter((r) => {
       const q = historyQuery.trim().toLowerCase();
       if (!q) return true;
@@ -799,16 +818,16 @@ export default function Admin() {
           <div>
             <div className="rw-admin-panel-head">
               <div>
-                <h2 style={{ marginBottom: 4 }}>Laundry Orders, Today</h2>
-                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Older orders have moved to History automatically.</p>
+                <h2 style={{ marginBottom: 4 }}>Laundry Orders</h2>
+                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Stays here until a Manager or Admin clears it, then it moves to History.</p>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "laundry" ? null : "laundry")}>
                   {draftType === "laundry" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Order</>}
                 </button>
-                {todaysOrders.length > 0 && (
+                {canClearLists && todaysOrders.length > 0 && (
                   <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysOrders}>
-                    <RefreshCw size={14} /> Clear today's list
+                    <RefreshCw size={14} /> Clear list
                   </button>
                 )}
               </div>
@@ -988,16 +1007,16 @@ export default function Admin() {
           <div>
             <div className="rw-admin-panel-head">
               <div>
-                <h2 style={{ marginBottom: 4 }}>Cleaning Bookings, Today</h2>
+                <h2 style={{ marginBottom: 4 }}>Cleaning Bookings</h2>
                 <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Prices are internal, never shown to the customer; confirm and adjust here.</p>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "cleaning" ? null : "cleaning")}>
                   {draftType === "cleaning" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Booking</>}
                 </button>
-                {todaysBookings.length > 0 && (
+                {canClearLists && todaysBookings.length > 0 && (
                   <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysBookings}>
-                    <RefreshCw size={14} /> Clear today's list
+                    <RefreshCw size={14} /> Clear list
                   </button>
                 )}
               </div>
@@ -1100,16 +1119,16 @@ export default function Admin() {
           <div>
             <div className="rw-admin-panel-head">
               <div>
-                <h2 style={{ marginBottom: 4 }}>Shop Orders, Today</h2>
-                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Older shop orders have moved to History automatically.</p>
+                <h2 style={{ marginBottom: 4 }}>Shop Orders</h2>
+                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Stays here until a Manager or Admin clears it, then it moves to History.</p>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "shop" ? null : "shop")}>
                   {draftType === "shop" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Sale</>}
                 </button>
-                {todaysShopOrders.length > 0 && (
+                {canClearLists && todaysShopOrders.length > 0 && (
                   <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysShopOrders}>
-                    <RefreshCw size={14} /> Clear today's list
+                    <RefreshCw size={14} /> Clear list
                   </button>
                 )}
               </div>
@@ -1217,6 +1236,9 @@ export default function Admin() {
                   <button key={r.id} className={`rw-pill ${historyRange === r.id ? "active" : ""}`} onClick={() => setHistoryRange(r.id)}>{r.label}</button>
                 ))}
               </div>
+              {historyRange === "custom" && (
+                <input type="date" style={{ maxWidth: 180 }} value={historyDate} onChange={(e) => setHistoryDate(e.target.value)} />
+              )}
             </div>
 
             <table className="rw-table">
@@ -1472,7 +1494,7 @@ export default function Admin() {
                 <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Detailed breakdown of all revenue streams and metrics.</p>
               </div>
               <div className="rw-pill-group">
-                {RANGES.map((r) => (
+                {RANGES.filter((r) => r.id !== "custom").map((r) => (
                   <button key={r.id} className={`rw-pill ${reportsRange === r.id ? "active" : ""}`} onClick={() => setReportsRange(r.id)}>{r.label}</button>
                 ))}
               </div>

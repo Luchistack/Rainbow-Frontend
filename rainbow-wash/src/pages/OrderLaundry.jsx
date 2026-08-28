@@ -7,7 +7,7 @@ import PageHeader from "../components/PageHeader";
 import FAQ from "../components/FAQ";
 import {
   ADDON_GROUPS, SELF_WASH_DISCOUNT_KG, SELF_WASH_DISCOUNT_RATE,
-  DELIVERY_FEE, DELIVERY_COVERAGE_NOTE, BANK_DETAILS, buildWhatsAppLink,
+  DELIVERY_FEE, DELIVERY_COVERAGE_NOTE, BANK_DETAILS, buildWhatsAppLink, VAT_RATE,
 } from "../data/constants";
 import { money, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
@@ -132,8 +132,9 @@ export default function OrderLaundry() {
   };
 
   const subtotal = items.reduce((s, i) => s + i.qty * i.price, 0);
+  const vat = subtotal * VAT_RATE;
   const deliveryFee = fulfilment === "pickup" ? DELIVERY_FEE : 0;
-  const total = subtotal + deliveryFee;
+  const total = subtotal + vat + deliveryFee;
 
   const copyAccount = () => {
     navigator.clipboard?.writeText(BANK_DETAILS.accountNumber);
@@ -478,6 +479,7 @@ export default function OrderLaundry() {
               </div>
             ))}
             <div className="rw-summary-row" style={{ marginTop: 10 }}><span>Subtotal</span><span>{money(subtotal)}</span></div>
+            <div className="rw-summary-row"><span>VAT ({VAT_RATE * 100}%)</span><span>{money(vat)}</span></div>
             <div className="rw-summary-row"><span>Delivery fee</span><span>{fulfilment === "pickup" ? money(deliveryFee) : "—"}</span></div>
             <div className="rw-summary-row total"><span>Total</span><span>{money(total)}</span></div>
             <button className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} onClick={submit}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Wallet, Phone, Mail, User, MessageCircle, Landmark, Copy } from "lucide-react";
+import { CheckCircle2, Wallet, Phone, Mail, User, MessageCircle, Landmark, Copy, Zap } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import Steps from "../components/Steps";
 import Testimonials from "../components/Testimonials";
@@ -79,6 +79,7 @@ function buildReceipt(booking) {
     `Requested payment split: ${booking.payType === "deposit" ? "30% deposit now, 70% on completion" : "Full payment"}`,
   ];
   if (booking.transferNote) lines.push(`Transfer note: ${booking.transferNote}`);
+  if (booking.express) lines.push(`Express (same-day) requested: Yes`);
   lines.push(`Customer name: ${booking.fullName}`);
   lines.push(`Customer phone: ${booking.phone}`);
   lines.push(`Customer email: ${booking.email || "—"}`);
@@ -97,6 +98,7 @@ export default function BookCleaning() {
   const [time, setTime] = useState("");
   const [address, setAddress] = useState("");
   const [payType, setPayType] = useState("deposit");
+  const [express, setExpress] = useState(false);
   const [transferNote, setTransferNote] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -134,7 +136,7 @@ export default function BookCleaning() {
       id: genRef("CLN"),
       service: svc.label,
       size: sizeObj?.label,
-      date, time, address, fullName, phone, email, price, payType, payable,
+      date, time, address, fullName, phone, email, price, payType, payable, express,
       transferNote,
       paymentStatus: "Pending",
       placedAt: new Date().toISOString(),
@@ -228,6 +230,19 @@ export default function BookCleaning() {
               </div>
             </div>
 
+            <div className="rw-field">
+              <label><Zap size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Need it done today?</label>
+              <div className="rw-pill-group">
+                <button className={`rw-pill ${!express ? "active" : ""}`} onClick={() => setExpress(false)}>Standard scheduling</button>
+                <button className={`rw-pill ${express ? "active" : ""}`} onClick={() => setExpress(true)}>Express (same-day)</button>
+              </div>
+              {express && (
+                <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 8 }}>
+                  Noted, our team will factor same-day turnaround into the price they confirm with you on WhatsApp.
+                </p>
+              )}
+            </div>
+
             <div className="rw-summary" style={{ marginBottom: 16 }}>
               <h4 style={{ fontSize: 13.5, display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
                 <Landmark size={15} /> If paying by bank transfer
@@ -266,6 +281,7 @@ export default function BookCleaning() {
             <div className="rw-summary-row"><span>Service</span><span>{svc?.label}</span></div>
             <div className="rw-summary-row"><span>Size</span><span>{sizeObj?.label}</span></div>
             <div className="rw-summary-row"><span>Payment split</span><span>{payType === "deposit" ? "30% / 70%" : "Full"}</span></div>
+            {express && <div className="rw-summary-row"><span>Turnaround</span><span style={{ fontWeight: 700, color: "var(--blue)" }}>Express (same-day)</span></div>}
             <div style={{ background: "var(--ice)", borderRadius: 12, padding: 14, marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
               <MessageCircle size={18} color="var(--blue)" style={{ flexShrink: 0, marginTop: 2 }} />
               <p style={{ fontSize: 13, color: "var(--ink-soft)", margin: 0 }}>

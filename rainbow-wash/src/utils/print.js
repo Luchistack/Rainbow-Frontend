@@ -1,53 +1,58 @@
 import { money } from "./format";
-import { BUSINESS_INFO } from "../data/constants";
+import { BUSINESS_INFO, VAT_RATE } from "../data/constants";
 
-function rowsForOrder(order) {
+function rowsForOrder(order, subtotal) {
   if (order.items && order.items.length) {
-    return order.items
-      .map(
-        (i) => `
-      <tr>
-        <td style="white-space: nowrap;">${i.name}</td>
-        <td style="text-align:center">${i.qty}${i.unit || ""}</td>
-        <td style="text-align:right">${money(i.price)}</td>
-        <td style="text-align:right">${money(i.price * i.qty)}</td>
-      </tr>`
-      )
-      .join("");
+    return order.items.map((i) => ({
+      desc: i.name,
+      qty: `${i.qty}${i.unit || ""}`,
+      unitPrice: i.price,
+      amount: i.price * i.qty,
+    }));
   }
-  return `
-      <tr>
-        <td style="white-space: nowrap;">${order.service || "Cleaning Service"} — ${order.size || ""}</td>
-        <td style="text-align:center">1</td>
-        <td style="text-align:right">${money(order.price || order.subtotal || 0)}</td>
-        <td style="text-align:right">${money(order.price || order.subtotal || 0)}</td>
-      </tr>`;
+  return [{ desc: `${order.service || "Cleaning Service"} — ${order.size || ""}`, qty: "1", unitPrice: subtotal, amount: subtotal }];
 }
 
-function plainTextLines(order) {
+// The one honest source of truth for a receipt's numbers. VAT is always ADDED
+// on top of the real item subtotal, never backed out of a stored total (that
+// was the bug: a ₦130,000 order was showing "VAT" as if it had been carved out
+// of ₦130,000, when nothing extra was ever actually charged).
+function computeTotals(order) {
   if (order.items && order.items.length) {
-    return order.items.map((i) => `- ${i.name} x${i.qty}${i.unit || ""}: ${money(i.price * i.qty)}`);
+    const itemsSubtotal = order.items.reduce((s, i) => s + i.qty * i.price, 0);
+    const vat = itemsSubtotal * VAT_RATE;
+    const total = order.total ?? itemsSubtotal + vat;
+    const other = Math.max(0, total - itemsSubtotal - vat); // delivery fee, if any
+    return { subtotal: itemsSubtotal, vat, other, total };
   }
-  return [`- ${order.service || "Cleaning Service"} (${order.size || ""}): ${money(order.price || order.subtotal || 0)}`];
+  // Cleaning bookings: no item list, just a single confirmed/negotiated price.
+  // That price is treated as the pre-VAT amount, VAT is added on top here.
+  const subtotal = order.payable ?? order.price ?? order.total ?? 0;
+  const vat = subtotal * VAT_RATE;
+  return { subtotal, vat, other: 0, total: subtotal + vat };
 }
 
-// Builds the same plain-text summary used elsewhere in the app, so the WhatsApp/
-// email share matches what customers already see in their order-confirmation receipts.
+function plainTextLines(order, subtotal) {
+  return rowsForOrder(order, subtotal).map((r) => `- ${r.desc} x${r.qty}: ${money(r.amount)}`);
+}
+
 function buildShareText(order) {
-  const subtotal = order.subtotal ?? order.price ?? (order.total ? order.total / 1.075 : 0);
-  const total = order.total ?? subtotal;
+  const { subtotal, vat, other, total } = computeTotals(order);
   const placedDate = order.placedAt ? new Date(order.placedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
-  return [
+  const lines = [
     `Rainbow Wash — Receipt ${order.id}`,
     `Date: ${placedDate}`,
     `Customer: ${order.fullName || "Customer"}${order.phone ? " (" + order.phone + ")" : ""}`,
     "",
-    ...plainTextLines(order),
+    ...plainTextLines(order, subtotal),
     "",
-    `Total: ${money(total)}`,
-    `Status: ${order.status || "—"}`,
-  ].join("\n");
+    `Subtotal: ${money(subtotal)}`,
+    `VAT (${VAT_RATE * 100}%): ${money(vat)}`,
+  ];
+  if (other > 1) lines.push(`Delivery / Other: ${money(other)}`);
+  lines.push(`Total: ${money(total)}`, `Status: ${order.status || "—"}`);
+  return lines.join("\n");
 }
 
 const PRINT_SIZE_CSS = {
@@ -80,16 +85,58 @@ const PRINT_SIZE_CSS = {
 };
 
 export function openPrintSlip(order, staffUser, onPrinted) {
-  const subtotal = order.subtotal ?? order.price ?? (order.total ? order.total / 1.075 : 0);
-  const tax = order.tax ?? (subtotal * 0.075);
-  const total = order.total ?? (subtotal + tax);
+  const { subtotal, vat, other, total } = computeTotals(order);
+  const rows = rowsForOrder(order, subtotal);
 
   const placedDate = order.placedAt ? new Date(order.placedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "—";
   const printedAt = new Date().toLocaleString("en-NG", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
 
   const shareText = buildShareText(order);
-  const waLink = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-  const gmailLink = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(`Rainbow Wash Receipt ${order.id}`)}&body=${encodeURIComponent(shareText)}`;
+  const waLinkFallback = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+  const gmailLinkFallback = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(`Rainbow Wash Receipt ${order.id}`)}&body=${encodeURIComponent(shareText)}`;
+
+  const tableRowsHtml = rows
+    .map(
+      (r) => `
+      <tr>
+        <td style="white-space: nowrap;">${r.desc}</td>
+        <td style="text-align:center">${r.qty}</td>
+        <td style="text-align:right">${money(r.unitPrice)}</td>
+        <td style="text-align:right">${money(r.amount)}</td>
+      </tr>`
+    )
+    .join("");
+
+  const otherRowHtml = other > 1 ? `<div><span>Delivery / Other</span><span>${money(other)}</span></div>` : "";
+
+  // Pre-format every number the PDF script needs, out here where `money()` is
+  // actually available, and pass the finished strings in — the popup window's
+  // script has no access to this app's imports, so it must not try to
+  // reformat currency itself.
+  const pdfItems = rows.map((r) => ({ desc: r.desc, qty: r.qty, unitPrice: money(r.unitPrice), amount: money(r.amount) }));
+  const pdfData = {
+    bizName: BUSINESS_INFO.name,
+    contactLine: BUSINESS_INFO.phones.join(" / "),
+    email: BUSINESS_INFO.email,
+    billTo: order.fullName || "Customer",
+    phone: order.phone || "",
+    ref: order.id,
+    date: placedDate,
+    status: order.status || "—",
+    items: pdfItems,
+    subtotal: money(subtotal),
+    vatLabel: `VAT (${VAT_RATE * 100}%)`,
+    vat: money(vat),
+    other: other > 1 ? money(other) : null,
+    total: money(total),
+    printedBy: `${staffUser?.name || "Staff"} (${staffUser?.role || "Staff"})`,
+    printedAt,
+    fileName: `${order.id}-receipt.pdf`,
+    shareTitle: `Rainbow Wash Receipt ${order.id}`,
+    shareText,
+    waLinkFallback,
+    gmailLinkFallback,
+  };
 
   const html = `
 <!doctype html>
@@ -97,6 +144,7 @@ export function openPrintSlip(order, staffUser, onPrinted) {
 <head>
 <meta charset="utf-8" />
 <title>${order.id} — Rainbow Wash</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -109,8 +157,10 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   .toolbar b { display: block; width: 100%; font-size: 12px; color: #4c6079; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
   .toolbar button { font-family: inherit; font-size: 13px; font-weight: 700; padding: 9px 14px; border-radius: 8px; border: none; cursor: pointer; }
   .btn-print { background: #1f6fb2; color: #fff; }
+  .btn-pdf { background: #6b21a8; color: #fff; }
   .btn-wa { background: #25d366; color: #fff; }
   .btn-mail { background: #ea4335; color: #fff; }
+  .share-hint { width: 100%; font-size: 11.5px; color: #6b7a8a; margin-top: 2px; }
 
   .print-rainbow-stripe { height: 6px; width: 100%; display: flex; margin-bottom: 24px; border-radius: 4px; overflow: hidden; }
   .print-rainbow-stripe span { flex: 1; }
@@ -146,8 +196,10 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     <button class="btn-print" onclick="setSizeAndPrint('a4')">🖨️ Print A4</button>
     <button class="btn-print" onclick="setSizeAndPrint('thermal80')">🖨️ Print 80mm receipt</button>
     <button class="btn-print" onclick="setSizeAndPrint('thermal58')">🖨️ Print 58mm receipt</button>
-    <button class="btn-wa" onclick="window.open('${waLink}', '_blank')">💬 Share via WhatsApp</button>
-    <button class="btn-mail" onclick="window.location.href='${gmailLink}'">✉️ Share via Gmail</button>
+    <button class="btn-pdf" onclick="downloadPdf()">⬇️ Download PDF</button>
+    <button class="btn-wa" onclick="shareTo('whatsapp')">💬 Share via WhatsApp</button>
+    <button class="btn-mail" onclick="shareTo('gmail')">✉️ Share via Gmail</button>
+    <span class="share-hint">Share buttons attach the actual PDF where your browser supports it (most mobile browsers); otherwise they download the PDF and open a pre-filled message so you can attach it manually.</span>
   </div>
 
   <div class="print-rainbow-stripe">
@@ -187,13 +239,14 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       <tr><th>Description</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Amount</th></tr>
     </thead>
     <tbody>
-      ${rowsForOrder(order)}
+      ${tableRowsHtml}
     </tbody>
   </table>
 
   <div class="totals">
     <div><span>Subtotal</span><span>${money(subtotal)}</span></div>
-    <div><span>VAT (7.5%)</span><span>${money(tax)}</span></div>
+    <div><span>VAT (${VAT_RATE * 100}%)</span><span>${money(vat)}</span></div>
+    ${otherRowHtml}
     <div class="grand"><span>Total</span><span>${money(total)}</span></div>
   </div>
 
@@ -203,12 +256,121 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   </div>
 
   <script>
+    var PDF_DATA = ${JSON.stringify(pdfData)};
+
     function setSizeAndPrint(size) {
       document.body.className = 'size-' + size;
       window.print();
+      notifyPrinted();
+    }
+
+    function notifyPrinted() {
       if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ rainbowWashPrinted: true, orderId: ${JSON.stringify(order.id)} }, '*');
+        window.opener.postMessage({ rainbowWashPrinted: true, orderId: PDF_DATA.ref }, '*');
       }
+    }
+
+    function buildPdf() {
+      var d = PDF_DATA;
+      var jsPDFCtor = window.jspdf.jsPDF;
+      var doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
+      var left = 40, y = 50;
+
+      doc.setFontSize(16); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
+      doc.text(d.bizName, left, y);
+      doc.setFontSize(9); doc.setTextColor(85, 85, 85); doc.setFont(undefined, 'normal');
+      doc.text(d.contactLine, 555, y - 10, { align: 'right' });
+      doc.text(d.email, 555, y + 4, { align: 'right' });
+
+      y += 34;
+      doc.setFontSize(18); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
+      doc.text('Service Receipt / Slip', left, y);
+
+      y += 26;
+      doc.setFontSize(10); doc.setTextColor(20, 20, 20); doc.setFont(undefined, 'normal');
+      doc.text('Bill To: ' + d.billTo, left, y);
+      doc.text('Ref: ' + d.ref, 555, y, { align: 'right' });
+      y += 14;
+      doc.text(d.phone, left, y);
+      doc.text('Date: ' + d.date, 555, y, { align: 'right' });
+      y += 14;
+      doc.text('Status: ' + d.status, 555, y, { align: 'right' });
+
+      y += 26;
+      doc.setFillColor(234, 244, 251);
+      doc.rect(left, y - 12, 515, 20, 'F');
+      doc.setFontSize(9); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
+      doc.text('DESCRIPTION', left + 6, y + 2);
+      doc.text('QTY', 330, y + 2);
+      doc.text('UNIT PRICE', 400, y + 2);
+      doc.text('AMOUNT', 500, y + 2);
+      y += 20;
+
+      doc.setFont(undefined, 'normal'); doc.setTextColor(20, 20, 20);
+      d.items.forEach(function (r) {
+        doc.text(String(r.desc).slice(0, 48), left + 6, y);
+        doc.text(String(r.qty), 330, y);
+        doc.text(String(r.unitPrice), 400, y);
+        doc.text(String(r.amount), 500, y);
+        y += 18;
+        doc.setDrawColor(230, 230, 230);
+        doc.line(left, y - 6, 555, y - 6);
+      });
+
+      y += 14;
+      var totalsX = 380;
+      doc.text('Subtotal', totalsX, y);
+      doc.text(d.subtotal, 555, y, { align: 'right' });
+      y += 16;
+      doc.text(d.vatLabel, totalsX, y);
+      doc.text(d.vat, 555, y, { align: 'right' });
+      y += 16;
+      if (d.other) {
+        doc.text('Delivery / Other', totalsX, y);
+        doc.text(d.other, 555, y, { align: 'right' });
+        y += 16;
+      }
+      doc.setDrawColor(12, 63, 102); doc.line(totalsX, y - 4, 555, y - 4);
+      y += 12;
+      doc.setFontSize(13); doc.setFont(undefined, 'bold'); doc.setTextColor(12, 63, 102);
+      doc.text('Total', totalsX, y);
+      doc.text(d.total, 555, y, { align: 'right' });
+
+      y += 50;
+      doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(120, 120, 120);
+      doc.text('Printed by: ' + d.printedBy, left, y);
+      doc.text(d.printedAt, 555, y, { align: 'right' });
+
+      return doc;
+    }
+
+    function downloadPdf() {
+      buildPdf().save(PDF_DATA.fileName);
+      notifyPrinted();
+    }
+
+    async function shareTo(channel) {
+      var doc = buildPdf();
+      var blob = doc.output('blob');
+      var file = new File([blob], PDF_DATA.fileName, { type: 'application/pdf' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: PDF_DATA.shareTitle, text: PDF_DATA.shareText });
+          notifyPrinted();
+          return;
+        } catch (e) {
+          // user cancelled the native share sheet, or it's unsupported here — fall through
+        }
+      }
+
+      doc.save(PDF_DATA.fileName);
+      if (channel === 'whatsapp') {
+        window.open(PDF_DATA.waLinkFallback, '_blank');
+      } else {
+        window.location.href = PDF_DATA.gmailLinkFallback;
+      }
+      notifyPrinted();
     }
   </script>
 </body>
@@ -220,10 +382,6 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   win.document.write(html);
   win.document.close();
 
-  // Listens for the postMessage the print window sends the moment any actual
-  // print button is clicked, so the dashboard can flip the order to "printed"
-  // (locking it from deletion) only once a real print action happened — not
-  // just because the preview window was opened.
   if (onPrinted) {
     const handler = (event) => {
       if (event.data && event.data.rainbowWashPrinted && event.data.orderId === order.id) {
