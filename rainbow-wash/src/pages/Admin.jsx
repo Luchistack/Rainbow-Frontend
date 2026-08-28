@@ -2,14 +2,18 @@ import { useEffect, useState } from "react";
 import {
   Lock, LayoutDashboard, Truck, Calendar, Package, Plus, ShoppingBag, History, Search,
   Archive, Shirt, RefreshCw, DollarSign, BarChart3, Printer, LogOut, User, Eye, EyeOff, KeyRound, Shield, Trash2,
+  Zap, ChevronDown, ChevronUp, X,
 } from "lucide-react";
-import { TRACK_STAGES, PAYMENT_STATUSES } from "../data/constants";
-import { money, formatPlacedAt, isToday, matchesRange } from "../utils/format";
+import {
+  TRACK_STAGES, PAYMENT_STATUSES, ADDON_GROUPS, DELIVERY_FEE,
+} from "../data/constants";
+import { money, formatPlacedAt, isToday, matchesRange, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
 import { openPrintSlip } from "../utils/print";
 import {
-  loginAdmin, logoutUser, createEmployee, fetchEmployees, resetEmployeePassword, changePassword,
-  createProduct, updateProduct, deleteProduct,
+  loginAdmin, logoutUser, createEmployee, fetchEmployees, resetEmployeePassword, deleteEmployee, changePassword,
+  createProduct, updateProduct, deleteProduct, createBooking, updateBooking,
+  createOrder, updateOrder, createShopOrder, updateShopOrder,
 } from "../api/api";
 
 const MIN_UNIT = 5;
@@ -29,7 +33,8 @@ export default function Admin() {
     products, setProducts,
     selfWashRates, setSelfWashRates, staffWashRates, setStaffWashRates,
     dryCleanItems, setDryCleanItems, shoeCareItems, setShoeCareItems,
-    addonProducts, setAddonProducts,
+    addonProducts, setAddonProducts, expressServices, setExpressServices,
+    cleaningServices,
     currentUser, setCurrentUser,
     notify,
   } = useApp();
@@ -53,6 +58,54 @@ export default function Admin() {
   const [newStock, setNewStock] = useState(MIN_UNIT);
   const [newStatus, setNewStatus] = useState("Active");
   const [addingProduct, setAddingProduct] = useState(false);
+
+  // "Add new item" input state, one per pricing category — kept minimal since
+  // it's just a label/price pair (plus a group for add-ons) before Add is clicked.
+  const [newSelfWash, setNewSelfWash] = useState({ label: "", price: "" });
+  const [newStaffWash, setNewStaffWash] = useState({ label: "", price: "" });
+  const [newDryClean, setNewDryClean] = useState({ label: "", regular: "", deep: "" });
+  const [newShoeCare, setNewShoeCare] = useState({ label: "", regular: "", deep: "", repair: "" });
+  const [newExpress, setNewExpress] = useState({ label: "", price: "" });
+  const [newAddon, setNewAddon] = useState({ label: "", price: "", group: ADDON_GROUPS[0] });
+
+  // Confirmation gate before permanently deleting a staff/manager account.
+  const [confirmDeleteEmp, setConfirmDeleteEmp] = useState(null);
+  const [deletingEmpId, setDeletingEmpId] = useState(null);
+
+  // --- Walk-in / offline order drafting ---
+  // Each of the three order types gets its own "open a draft" toggle. While a
+  // draft is open, staff/manager/admin can freely add, edit and remove lines —
+  // nothing is added to the real Today's lists (and nothing is locked) until
+  // "Place Order" is clicked.
+  const [draftType, setDraftType] = useState(null); // "laundry" | "cleaning" | "shop" | null
+  const [draftItems, setDraftItems] = useState([]); // laundry/shop line items being built
+  const [draftFullName, setDraftFullName] = useState("");
+  const [draftPhone, setDraftPhone] = useState("");
+  const [draftFulfilment, setDraftFulfilment] = useState("dropoff");
+  const [draftAddress, setDraftAddress] = useState("");
+  const [draftMode, setDraftMode] = useState("pickup"); // shop fulfilment
+  // Cleaning-specific draft fields
+  const [draftServiceId, setDraftServiceId] = useState("");
+  const [draftSizeId, setDraftSizeId] = useState("");
+  const [draftBookingDate, setDraftBookingDate] = useState("");
+  const [draftBookingTime, setDraftBookingTime] = useState("");
+  const [draftPayable, setDraftPayable] = useState("");
+  // Laundry draft item picker
+  const [draftCategory, setDraftCategory] = useState("selfwash");
+  const [draftWashRateId, setDraftWashRateId] = useState("");
+  const [draftWashWeight, setDraftWashWeight] = useState(1);
+  const [draftDcItemId, setDraftDcItemId] = useState("");
+  const [draftDcType, setDraftDcType] = useState("regular");
+  const [draftDcQty, setDraftDcQty] = useState(1);
+  const [draftScItemId, setDraftScItemId] = useState("");
+  const [draftScType, setDraftScType] = useState("regular");
+  const [draftScQty, setDraftScQty] = useState(1);
+  const [draftExItemId, setDraftExItemId] = useState("");
+  const [draftExQty, setDraftExQty] = useState(1);
+  // Shop draft product picker
+  const [draftProductId, setDraftProductId] = useState("");
+  const [draftProductQty, setDraftProductQty] = useState(1);
+  const [placingDraft, setPlacingDraft] = useState(false);
 
   // Team creation states
   const [empFullName, setEmpFullName] = useState("");
@@ -216,16 +269,35 @@ export default function Admin() {
     todaysBookings.reduce((s, b) => s + b.payable, 0) +
     todaysShopOrders.reduce((s, o) => s + o.total, 0);
 
-  const updateOrderStatus = (id, status) => setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o)));
-  const updateOrderTotal = (id, total) => setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, total: Number(total) } : o)));
-  const updateOrderPayment = (id, paymentStatus) => setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentStatus } : o)));
+  // --- Laundry order field updates: optimistic local update, then persist to
+  // the backend if this record actually has a real DB id (records that only
+  // ever existed locally, e.g. from before the backend was wired up, or if an
+  // API call failed at creation time, are simply skipped here, not an error). ---
+  const persistOrder = (id, patch) => {
+    const target = laundryOrders.find((o) => o.id === id);
+    if (!target?.dbId) return;
+    updateOrder(target.dbId, patch).catch(() => notify("Saved locally, but failed to sync to the server"));
+  };
+  const updateOrderStatus = (id, status) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o))); persistOrder(id, { status }); };
+  const updateOrderTotal = (id, total) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, total: Number(total) } : o))); persistOrder(id, { total: Number(total) }); };
+  const updateOrderPayment = (id, paymentStatus) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentStatus } : o))); persistOrder(id, { paymentStatus }); };
 
-  const updateBookingStatus = (id, status) => setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status } : b)));
-  const updateBookingPayable = (id, payable) => setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, payable: Number(payable) } : b)));
-  const updateBookingPayment = (id, paymentStatus) => setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, paymentStatus } : b)));
+  const persistBookingUpdate = (id, patch) => {
+    const target = bookings.find((b) => b.id === id);
+    if (!target?.dbId) return;
+    updateBooking(target.dbId, patch).catch(() => notify("Saved locally, but failed to sync to the server"));
+  };
+  const updateBookingStatus = (id, status) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status } : b))); persistBookingUpdate(id, { status }); };
+  const updateBookingPayable = (id, payable) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, payable: Number(payable) } : b))); persistBookingUpdate(id, { payable: Number(payable) }); };
+  const updateBookingPayment = (id, paymentStatus) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, paymentStatus } : b))); persistBookingUpdate(id, { paymentStatus }); };
 
-  const updateShopOrderStatus = (id, status) => setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o)));
-  const updateShopPayment = (id, paymentStatus) => setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentStatus } : o)));
+  const persistShopOrder = (id, patch) => {
+    const target = shopOrders.find((o) => o.id === id);
+    if (!target?.dbId) return;
+    updateShopOrder(target.dbId, patch).catch(() => notify("Saved locally, but failed to sync to the server"));
+  };
+  const updateShopOrderStatus = (id, status) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, status } : o))); persistShopOrder(id, { status }); };
+  const updateShopPayment = (id, paymentStatus) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentStatus } : o))); persistShopOrder(id, { paymentStatus }); };
 
   // --- Inventory: local field edits (as-you-type, no network call) ---
   const updateProductField = (id, field, value) => {
@@ -273,9 +345,9 @@ export default function Admin() {
     }
   };
 
-  const archiveOrder = (id) => setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, archived: true } : o)));
-  const archiveBooking = (id) => setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, archived: true } : b)));
-  const archiveShopOrder = (id) => setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, archived: true } : o)));
+  const archiveOrder = (id) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, archived: true } : o))); persistOrder(id, { archived: true }); };
+  const archiveBooking = (id) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, archived: true } : b))); persistBookingUpdate(id, { archived: true }); };
+  const archiveShopOrder = (id) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, archived: true } : o))); persistShopOrder(id, { archived: true }); };
 
   const clearTodaysOrders = () => setLaundryOrders((os) => os.map((o) => (!o.archived && isToday(o.placedAt) ? { ...o, archived: true } : o)));
   const clearTodaysBookings = () => setBookings((bs) => bs.map((b) => (!b.archived && isToday(b.placedAt) ? { ...b, archived: true } : b)));
@@ -393,14 +465,237 @@ export default function Admin() {
     }
   };
 
-  const updateSelfWash = (id, price) => setSelfWashRates((rs) => rs.map((r) => (r.id === id ? { ...r, price: Number(price) } : r)));
-  const updateStaffWash = (id, price) => setStaffWashRates((rs) => rs.map((r) => (r.id === id ? { ...r, price: Number(price) } : r)));
-  const updateDryClean = (id, field, value) => setDryCleanItems((its) => its.map((i) => (i.id === id ? { ...i, [field]: Number(value) } : i)));
-  const updateShoeCare = (id, field, value) => setShoeCareItems((its) => its.map((i) => (i.id === id ? { ...i, [field]: Number(value) } : i)));
-  const updateAddon = (id, price) => {
-    const numPrice = Number(price);
-    setAddonProducts((ps) => ps.map((p) => (p.id === id ? { ...p, price: numPrice } : p)));
-    setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, price: numPrice } : p)));
+  // --- Pricing: full CRUD (rename, reprice, add, delete) across every category.
+  // All Manager/Admin-only, gated at the tab level by canEditPricing. ---
+  const updateSelfWash = (id, field, value) => setSelfWashRates((rs) => rs.map((r) => (r.id === id ? { ...r, [field]: field === "label" ? value : Number(value) } : r)));
+  const deleteSelfWash = (id) => setSelfWashRates((rs) => rs.filter((r) => r.id !== id));
+  const addSelfWash = () => {
+    if (!newSelfWash.label.trim() || newSelfWash.price === "") return;
+    setSelfWashRates((rs) => [...rs, { id: `sw-${Date.now()}`, label: newSelfWash.label.trim(), unit: "kg", price: Number(newSelfWash.price) }]);
+    setNewSelfWash({ label: "", price: "" });
+  };
+
+  const updateStaffWash = (id, field, value) => setStaffWashRates((rs) => rs.map((r) => (r.id === id ? { ...r, [field]: field === "label" ? value : Number(value) } : r)));
+  const deleteStaffWash = (id) => setStaffWashRates((rs) => rs.filter((r) => r.id !== id));
+  const addStaffWash = () => {
+    if (!newStaffWash.label.trim() || newStaffWash.price === "") return;
+    setStaffWashRates((rs) => [...rs, { id: `stw-${Date.now()}`, label: newStaffWash.label.trim(), unit: "kg", price: Number(newStaffWash.price) }]);
+    setNewStaffWash({ label: "", price: "" });
+  };
+
+  const updateDryClean = (id, field, value) => setDryCleanItems((its) => its.map((i) => (i.id === id ? { ...i, [field]: field === "label" ? value : Number(value) } : i)));
+  const deleteDryClean = (id) => setDryCleanItems((its) => its.filter((i) => i.id !== id));
+  const addDryClean = () => {
+    if (!newDryClean.label.trim() || newDryClean.regular === "" || newDryClean.deep === "") return;
+    setDryCleanItems((its) => [...its, { id: `dc-${Date.now()}`, label: newDryClean.label.trim(), regular: Number(newDryClean.regular), deep: Number(newDryClean.deep) }]);
+    setNewDryClean({ label: "", regular: "", deep: "" });
+  };
+
+  const updateShoeCare = (id, field, value) => setShoeCareItems((its) => its.map((i) => (i.id === id ? { ...i, [field]: field === "label" ? value : Number(value) } : i)));
+  const deleteShoeCare = (id) => setShoeCareItems((its) => its.filter((i) => i.id !== id));
+  const addShoeCare = () => {
+    if (!newShoeCare.label.trim() || newShoeCare.regular === "" || newShoeCare.deep === "" || newShoeCare.repair === "") return;
+    setShoeCareItems((its) => [...its, { id: `sc-${Date.now()}`, label: newShoeCare.label.trim(), regular: Number(newShoeCare.regular), deep: Number(newShoeCare.deep), repair: Number(newShoeCare.repair) }]);
+    setNewShoeCare({ label: "", regular: "", deep: "", repair: "" });
+  };
+
+  const updateExpress = (id, field, value) => setExpressServices((its) => its.map((i) => (i.id === id ? { ...i, [field]: field === "label" ? value : Number(value) } : i)));
+  const deleteExpress = (id) => setExpressServices((its) => its.filter((i) => i.id !== id));
+  const addExpress = () => {
+    if (!newExpress.label.trim() || newExpress.price === "") return;
+    setExpressServices((its) => [...its, { id: `ex-${Date.now()}`, label: newExpress.label.trim(), price: Number(newExpress.price) }]);
+    setNewExpress({ label: "", price: "" });
+  };
+
+  const updateAddon = (id, field, value) => {
+    setAddonProducts((ps) => ps.map((p) => (p.id === id ? { ...p, [field]: field === "price" ? Number(value) : value } : p)));
+    if (field === "price") setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, price: Number(value) } : p)));
+  };
+  const deleteAddon = (id) => setAddonProducts((ps) => ps.filter((p) => p.id !== id));
+  const addAddon = () => {
+    if (!newAddon.label.trim() || newAddon.price === "") return;
+    setAddonProducts((ps) => [...ps, { id: `ad-${Date.now()}`, label: newAddon.label.trim(), price: Number(newAddon.price), group: newAddon.group }]);
+    setNewAddon({ label: "", price: "", group: ADDON_GROUPS[0] });
+  };
+
+  // --- Staff Account Deletion (Admin only, cannot delete Admin accounts) ---
+  const handleDeleteEmployee = async (employee) => {
+    setDeletingEmpId(employee.id);
+    try {
+      await deleteEmployee(employee.id);
+      setEmployees((emps) => emps.filter((e) => e.id !== employee.id));
+      notify(`${employee.fullName}'s account has been permanently deleted.`);
+      setConfirmDeleteEmp(null);
+    } catch (err) {
+      notify(err.message || "Failed to delete account");
+    } finally {
+      setDeletingEmpId(null);
+    }
+  };
+
+  // --- Order locking (walk-in & web orders alike) ---
+  // "locked" is true the moment an order exists in a Today's table (it's been
+  // submitted) — from then on, regular Staff can no longer edit its content or
+  // delete it; Manager/Admin still can, right up until it's actually printed.
+  // "printed" becomes true only once a real print button is clicked inside the
+  // print-preview window (see print.js) — after that, nobody can delete it.
+  const canEditOrderContent = role !== "Staff";
+  const canDeleteOrder = (o) => role !== "Staff" && !o.printed;
+  const markLaundryPrinted = (id) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, printed: true } : o))); persistOrder(id, { printed: true }); };
+  const markBookingPrinted = (id) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, printed: true } : b))); persistBookingUpdate(id, { printed: true }); };
+  const markShopPrinted = (id) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, printed: true } : o))); persistShopOrder(id, { printed: true }); };
+
+  // --- Walk-in order drafting ---
+  const resetDraft = () => {
+    setDraftType(null);
+    setDraftItems([]);
+    setDraftFullName("");
+    setDraftPhone("");
+    setDraftFulfilment("dropoff");
+    setDraftAddress("");
+    setDraftMode("pickup");
+    setDraftServiceId("");
+    setDraftSizeId("");
+    setDraftBookingDate("");
+    setDraftBookingTime("");
+    setDraftPayable("");
+    setDraftProductId("");
+    setDraftProductQty(1);
+  };
+
+  const openDraft = (type) => {
+    resetDraft();
+    setDraftType(type);
+    if (type === "cleaning" && cleaningServices?.length) {
+      setDraftServiceId(cleaningServices[0].id);
+      setDraftSizeId(cleaningServices[0].sizes[0].id);
+    }
+    if (type === "shop" && products?.length) setDraftProductId(products[0].id);
+    if (selfWashRates?.length) setDraftWashRateId(selfWashRates[0].id);
+    if (dryCleanItems?.length) setDraftDcItemId(dryCleanItems[0].id);
+    if (shoeCareItems?.length) setDraftScItemId(shoeCareItems[0].id);
+    if (expressServices?.length) setDraftExItemId(expressServices[0].id);
+  };
+
+  const addDraftItem = (name, qty, price, unit) => {
+    setDraftItems((its) => {
+      const existing = its.find((i) => i.name === name && i.unit === unit);
+      if (existing) return its.map((i) => (i === existing ? { ...i, qty: i.qty + qty } : i));
+      return [...its, { id: `${Date.now()}-${Math.random()}`, name, qty, price, unit }];
+    });
+  };
+  const removeDraftItem = (id) => setDraftItems((its) => its.filter((i) => i.id !== id));
+
+  const addDraftWashLine = () => {
+    const isSelf = draftCategory === "selfwash";
+    const rate = (isSelf ? selfWashRates : staffWashRates).find((r) => r.id === draftWashRateId);
+    if (!rate) return;
+    addDraftItem(`${isSelf ? "Self Wash" : "Staff Wash"}, ${rate.label}`, draftWashWeight, rate.price, "kg");
+  };
+  const addDraftDryCleanLine = () => {
+    const item = dryCleanItems.find((i) => i.id === draftDcItemId);
+    if (!item) return;
+    const price = draftDcType === "deep" ? item.deep : item.regular;
+    addDraftItem(`${item.label} (${draftDcType === "deep" ? "Deep Clean" : "Regular"})`, draftDcQty, price, "");
+  };
+  const addDraftShoeCareLine = () => {
+    const item = shoeCareItems.find((i) => i.id === draftScItemId);
+    if (!item) return;
+    const price = draftScType === "deep" ? item.deep : draftScType === "repair" ? item.repair : item.regular;
+    const typeLabel = draftScType === "deep" ? "Deep Clean" : draftScType === "repair" ? "Minor Repairs" : "Regular";
+    addDraftItem(`${item.label} (${typeLabel})`, draftScQty, price, "");
+  };
+  const addDraftExpressLine = () => {
+    const item = expressServices.find((i) => i.id === draftExItemId);
+    if (!item) return;
+    addDraftItem(item.label, draftExQty, item.price, "");
+  };
+  const addDraftProductLine = () => {
+    const product = products.find((p) => p.id === draftProductId);
+    if (!product) return;
+    addDraftItem(product.name, draftProductQty, product.price, "");
+  };
+
+  const draftSubtotal = draftItems.reduce((s, i) => s + i.qty * i.price, 0);
+  const draftTotal = draftType === "laundry" && draftFulfilment === "pickup" ? draftSubtotal + DELIVERY_FEE : draftSubtotal;
+
+  const placeDraftLaundryOrder = async () => {
+    if (draftItems.length === 0) { notify("Add at least one item first"); return; }
+    if (!draftFullName.trim() || !draftPhone.trim()) { notify("Name and phone are required"); return; }
+    const localOrder = {
+      id: genRef("LND"),
+      items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price, unit: i.unit })),
+      fulfilment: draftFulfilment, address: draftAddress, date: "", time: "",
+      payment: "walk-in", paymentStatus: "Pending", transferNote: "",
+      fullName: draftFullName.trim(), phone: draftPhone.trim(), email: "",
+      placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
+      total: draftTotal, status: "Received",
+    };
+    setPlacingDraft(true);
+    try {
+      const saved = await createOrder({
+        items: draftItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, price: i.price })),
+        fulfilment: draftFulfilment, address: draftAddress,
+        paymentMethod: "walk-in", total: draftTotal,
+        fullName: draftFullName.trim(), phone: draftPhone.trim(),
+        createdBy: currentUser?.name,
+      }).catch(() => localOrder);
+      setLaundryOrders((os) => [saved || localOrder, ...os]);
+      notify(`Walk-in order ${(saved || localOrder).id} placed`);
+      resetDraft();
+    } finally {
+      setPlacingDraft(false);
+    }
+  };
+
+  const placeDraftBooking = async () => {
+    if (!draftFullName.trim() || !draftPhone.trim()) { notify("Name and phone are required"); return; }
+    const svc = cleaningServices.find((s) => s.id === draftServiceId);
+    const size = svc?.sizes.find((s) => s.id === draftSizeId);
+    const payable = draftPayable === "" ? size?.price || 0 : Number(draftPayable);
+    setPlacingDraft(true);
+    try {
+      const localBooking = {
+        id: genRef("CLN"),
+        service: svc?.label || "", size: size?.label || "",
+        date: draftBookingDate, time: draftBookingTime, address: draftAddress,
+        fullName: draftFullName.trim(), phone: draftPhone.trim(), email: "",
+        price: size?.price || 0, payType: "full", payable,
+        paymentStatus: "Pending", status: "Confirmed",
+        placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
+      };
+      const saved = await createBooking(localBooking).catch(() => localBooking);
+      setBookings((bs) => [saved, ...bs]);
+      notify(`Walk-in booking ${saved.id || localBooking.id} placed`);
+      resetDraft();
+    } finally {
+      setPlacingDraft(false);
+    }
+  };
+
+  const placeDraftShopOrder = async () => {
+    if (draftItems.length === 0) { notify("Add at least one item first"); return; }
+    if (!draftFullName.trim() || !draftPhone.trim()) { notify("Name and phone are required"); return; }
+    const localOrder = {
+      id: genRef("SHOP"),
+      items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+      fullName: draftFullName.trim(), phone: draftPhone.trim(), mode: draftMode,
+      total: draftSubtotal, status: "Received", paymentStatus: "Pending",
+      placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
+    };
+    setPlacingDraft(true);
+    try {
+      const saved = await createShopOrder({
+        items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+        fullName: draftFullName.trim(), phone: draftPhone.trim(), mode: draftMode,
+        total: draftSubtotal, createdBy: currentUser?.name,
+      }).catch(() => localOrder);
+      setShopOrders((os) => [saved || localOrder, ...os]);
+      notify(`Walk-in sale ${(saved || localOrder).id} placed`);
+      resetDraft();
+    } finally {
+      setPlacingDraft(false);
+    }
   };
 
   const historyRows = [
@@ -507,24 +802,162 @@ export default function Admin() {
                 <h2 style={{ marginBottom: 4 }}>Laundry Orders, Today</h2>
                 <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Older orders have moved to History automatically.</p>
               </div>
-              {todaysOrders.length > 0 && (
-                <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysOrders}>
-                  <RefreshCw size={14} /> Clear today's list
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "laundry" ? null : "laundry")}>
+                  {draftType === "laundry" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Order</>}
                 </button>
-              )}
+                {todaysOrders.length > 0 && (
+                  <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysOrders}>
+                    <RefreshCw size={14} /> Clear today's list
+                  </button>
+                )}
+              </div>
             </div>
+
+            {draftType === "laundry" && (
+              <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Walk-In Laundry Order — Draft</h3>
+                <div className="rw-pill-group" style={{ marginBottom: 14 }}>
+                  {["selfwash", "staffwash", "dryclean", "shoecare", "express"].map((c) => (
+                    <button key={c} className={`rw-pill ${draftCategory === c ? "active" : ""}`} onClick={() => setDraftCategory(c)}>
+                      {{ selfwash: "Self Wash", staffwash: "Staff Wash", dryclean: "Dry Cleaning", shoecare: "Shoe Care", express: "Express" }[c]}
+                    </button>
+                  ))}
+                </div>
+
+                {(draftCategory === "selfwash" || draftCategory === "staffwash") && (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+                    <div style={{ flex: "1 1 220px" }}>
+                      <label>Service</label>
+                      <select value={draftWashRateId} onChange={(e) => setDraftWashRateId(e.target.value)}>
+                        {(draftCategory === "selfwash" ? selfWashRates : staffWashRates).map((r) => (
+                          <option key={r.id} value={r.id}>{r.label}, {money(r.price)}/kg</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label>Weight (kg)</label>
+                      <input type="number" step="0.5" min="0.5" style={{ width: 90 }} value={draftWashWeight} onChange={(e) => setDraftWashWeight(Number(e.target.value))} />
+                    </div>
+                    <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftWashLine}><Plus size={13} /> Add</button>
+                  </div>
+                )}
+
+                {draftCategory === "dryclean" && (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+                    <div style={{ flex: "1 1 220px" }}>
+                      <label>Item</label>
+                      <select value={draftDcItemId} onChange={(e) => setDraftDcItemId(e.target.value)}>
+                        {dryCleanItems.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label>Type</label>
+                      <select value={draftDcType} onChange={(e) => setDraftDcType(e.target.value)}>
+                        <option value="regular">Regular</option>
+                        <option value="deep">Deep Clean</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Qty</label>
+                      <input type="number" min="1" style={{ width: 70 }} value={draftDcQty} onChange={(e) => setDraftDcQty(Number(e.target.value))} />
+                    </div>
+                    <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftDryCleanLine}><Plus size={13} /> Add</button>
+                  </div>
+                )}
+
+                {draftCategory === "shoecare" && (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+                    <div style={{ flex: "1 1 220px" }}>
+                      <label>Item</label>
+                      <select value={draftScItemId} onChange={(e) => setDraftScItemId(e.target.value)}>
+                        {shoeCareItems.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label>Type</label>
+                      <select value={draftScType} onChange={(e) => setDraftScType(e.target.value)}>
+                        <option value="regular">Regular</option>
+                        <option value="deep">Deep Clean</option>
+                        <option value="repair">Minor Repairs</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Qty</label>
+                      <input type="number" min="1" style={{ width: 70 }} value={draftScQty} onChange={(e) => setDraftScQty(Number(e.target.value))} />
+                    </div>
+                    <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftShoeCareLine}><Plus size={13} /> Add</button>
+                  </div>
+                )}
+
+                {draftCategory === "express" && (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+                    <div style={{ flex: "1 1 220px" }}>
+                      <label>Express service</label>
+                      <select value={draftExItemId} onChange={(e) => setDraftExItemId(e.target.value)}>
+                        {expressServices.map((i) => <option key={i.id} value={i.id}>{i.label}, {money(i.price)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label>Qty</label>
+                      <input type="number" min="1" style={{ width: 70 }} value={draftExQty} onChange={(e) => setDraftExQty(Number(e.target.value))} />
+                    </div>
+                    <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftExpressLine}><Plus size={13} /> Add</button>
+                  </div>
+                )}
+
+                {draftItems.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    {draftItems.map((i) => (
+                      <div key={i.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--line)", fontSize: 13.5 }}>
+                        <span>{i.name} × {i.qty}{i.unit}</span>
+                        <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          {money(i.price * i.qty)}
+                          <button className="rw-icon-btn" onClick={() => removeDraftItem(i.id)}><Trash2 size={13} color="#e0473f" /></button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="rw-form-grid" style={{ marginBottom: 12 }}>
+                  <div><label>Customer name</label><input value={draftFullName} onChange={(e) => setDraftFullName(e.target.value)} placeholder="Walk-in customer" /></div>
+                  <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} placeholder="0803 123 4567" /></div>
+                </div>
+                <div className="rw-pill-group" style={{ marginBottom: 12 }}>
+                  <button className={`rw-pill ${draftFulfilment === "dropoff" ? "active" : ""}`} onClick={() => setDraftFulfilment("dropoff")}>Drop-off in store</button>
+                  <button className={`rw-pill ${draftFulfilment === "pickup" ? "active" : ""}`} onClick={() => setDraftFulfilment("pickup")}>Pickup & deliver (+{money(DELIVERY_FEE)})</button>
+                </div>
+                {draftFulfilment === "pickup" && (
+                  <div style={{ marginBottom: 12 }}><label>Address</label><input value={draftAddress} onChange={(e) => setDraftAddress(e.target.value)} /></div>
+                )}
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
+                  <b style={{ fontSize: 15 }}>Total: {money(draftTotal)}</b>
+                  <button className="rw-btn rw-btn-rainbow" onClick={placeDraftLaundryOrder}>Place Order</button>
+                </div>
+              </div>
+            )}
+
             <table className="rw-table">
-              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Items</th><th>Phone</th><th>Email</th><th>Total (₦)</th><th>Status</th><th>Payment</th><th></th></tr></thead>
+              <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Items</th><th>Fulfilment</th><th>Phone</th><th>Email</th><th>Total (₦)</th><th>Status</th><th>Payment</th><th></th></tr></thead>
               <tbody>
                 {todaysOrders.map((o) => (
                   <tr key={o.id}>
                     <td className="mono">{o.id}</td>
                     <td>{formatPlacedAt(o.placedAt)}</td>
                     <td>{o.fullName || "—"}</td>
-                    <td style={{ maxWidth: 240, fontSize: 13 }}>{o.items ? o.items.map((i) => `${i.name} ×${i.qty}${i.unit || ""}`).join(", ") : "—"}</td>
+                    <td style={{ maxWidth: 220, fontSize: 13 }}>{o.items ? o.items.map((i) => `${i.name} ×${i.qty}${i.unit || ""}`).join(", ") : "—"}</td>
+                    <td style={{ textTransform: "capitalize" }}>{o.fulfilment || "—"}</td>
                     <td>{o.phone || "—"}</td>
                     <td>{o.email || "—"}</td>
-                    <td><input type="number" step="50" style={{ width: 86, padding: "6px 8px" }} value={o.total} onChange={(e) => updateOrderTotal(o.id, e.target.value)} /></td>
+                    <td>
+                      {canEditOrderContent && !o.printed ? (
+                        <input type="number" step="50" style={{ width: 86, padding: "6px 8px" }} value={o.total} onChange={(e) => updateOrderTotal(o.id, e.target.value)} />
+                      ) : (
+                        <span style={{ fontWeight: 700 }}>{money(o.total)}</span>
+                      )}
+                    </td>
                     <td>
                       <select className="rw-status-select" value={o.status} onChange={(e) => updateOrderStatus(o.id, e.target.value)}>
                         {TRACK_STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -536,13 +969,15 @@ export default function Admin() {
                       </select>
                     </td>
                     <td style={{ display: "flex", gap: 4 }}>
-                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => openPrintSlip(o, currentUser)} title="Print slip"><Printer size={13} /></button>
-                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => archiveOrder(o.id)} title="Remove from today's list (kept in History)"><Archive size={13} /></button>
+                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => openPrintSlip(o, currentUser, () => markLaundryPrinted(o.id))} title="Print slip"><Printer size={13} /></button>
+                      {canDeleteOrder(o) && (
+                        <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => archiveOrder(o.id)} title="Remove from today's list (kept in History)"><Archive size={13} /></button>
+                      )}
                     </td>
                   </tr>
                 ))}
                 {todaysOrders.length === 0 && (
-                  <tr><td colSpan={10} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No laundry orders placed today yet.</td></tr>
+                  <tr><td colSpan={11} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No laundry orders placed today yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -556,12 +991,66 @@ export default function Admin() {
                 <h2 style={{ marginBottom: 4 }}>Cleaning Bookings, Today</h2>
                 <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Prices are internal, never shown to the customer; confirm and adjust here.</p>
               </div>
-              {todaysBookings.length > 0 && (
-                <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysBookings}>
-                  <RefreshCw size={14} /> Clear today's list
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "cleaning" ? null : "cleaning")}>
+                  {draftType === "cleaning" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Booking</>}
                 </button>
-              )}
+                {todaysBookings.length > 0 && (
+                  <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysBookings}>
+                    <RefreshCw size={14} /> Clear today's list
+                  </button>
+                )}
+              </div>
             </div>
+
+            {draftType === "cleaning" && (
+              <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Walk-In Cleaning Booking — Draft</h3>
+                <div className="rw-form-grid" style={{ marginBottom: 12 }}>
+                  <div>
+                    <label>Service</label>
+                    <select
+                      value={draftServiceId}
+                      onChange={(e) => {
+                        setDraftServiceId(e.target.value);
+                        const svc = cleaningServices.find((s) => s.id === e.target.value);
+                        if (svc) setDraftSizeId(svc.sizes[0].id);
+                      }}
+                    >
+                      {cleaningServices.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label>Size</label>
+                    <select value={draftSizeId} onChange={(e) => setDraftSizeId(e.target.value)}>
+                      {(cleaningServices.find((s) => s.id === draftServiceId)?.sizes || []).map((sz) => (
+                        <option key={sz.id} value={sz.id}>{sz.label}, {money(sz.price)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div><label>Date</label><input type="date" value={draftBookingDate} onChange={(e) => setDraftBookingDate(e.target.value)} /></div>
+                  <div><label>Time</label><input type="time" value={draftBookingTime} onChange={(e) => setDraftBookingTime(e.target.value)} /></div>
+                  <div><label>Customer name</label><input value={draftFullName} onChange={(e) => setDraftFullName(e.target.value)} /></div>
+                  <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} /></div>
+                  <div style={{ gridColumn: "1 / -1" }}><label>Address</label><input value={draftAddress} onChange={(e) => setDraftAddress(e.target.value)} /></div>
+                  <div>
+                    <label>Confirmed price (₦)</label>
+                    <input
+                      type="number" step="500"
+                      placeholder={String(cleaningServices.find((s) => s.id === draftServiceId)?.sizes.find((sz) => sz.id === draftSizeId)?.price || 0)}
+                      value={draftPayable}
+                      onChange={(e) => setDraftPayable(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button className="rw-btn rw-btn-rainbow" onClick={placeDraftBooking} disabled={placingDraft}>
+                    {placingDraft ? "Placing..." : "Place Booking"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <table className="rw-table">
               <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Service</th><th>Size</th><th>Date</th><th>Phone</th><th>Confirmed Price (₦)</th><th>Status</th><th>Payment</th><th></th></tr></thead>
               <tbody>
@@ -574,7 +1063,13 @@ export default function Admin() {
                     <td>{b.size}</td>
                     <td>{b.bookingDate || "—"} {b.bookingTime}</td>
                     <td>{b.phone || "—"}</td>
-                    <td><input type="number" step="500" style={{ width: 90, padding: "6px 8px" }} value={b.payable} onChange={(e) => updateBookingPayable(b.id, e.target.value)} /></td>
+                    <td>
+                      {canEditOrderContent && !b.printed ? (
+                        <input type="number" step="500" style={{ width: 90, padding: "6px 8px" }} value={b.payable} onChange={(e) => updateBookingPayable(b.id, e.target.value)} />
+                      ) : (
+                        <span style={{ fontWeight: 700 }}>{money(b.payable)}</span>
+                      )}
+                    </td>
                     <td>
                       <select className="rw-status-select" value={b.status} onChange={(e) => updateBookingStatus(b.id, e.target.value)}>
                         {BOOKING_STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -586,8 +1081,10 @@ export default function Admin() {
                       </select>
                     </td>
                     <td style={{ display: "flex", gap: 4 }}>
-                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => openPrintSlip(b, currentUser)} title="Print slip"><Printer size={13} /></button>
-                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => archiveBooking(b.id)} title="Remove from today's list (kept in History)"><Archive size={13} /></button>
+                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => openPrintSlip(b, currentUser, () => markBookingPrinted(b.id))} title="Print slip"><Printer size={13} /></button>
+                      {canDeleteOrder(b) && (
+                        <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => archiveBooking(b.id)} title="Remove from today's list (kept in History)"><Archive size={13} /></button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -606,12 +1103,65 @@ export default function Admin() {
                 <h2 style={{ marginBottom: 4 }}>Shop Orders, Today</h2>
                 <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Older shop orders have moved to History automatically.</p>
               </div>
-              {todaysShopOrders.length > 0 && (
-                <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysShopOrders}>
-                  <RefreshCw size={14} /> Clear today's list
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "shop" ? null : "shop")}>
+                  {draftType === "shop" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Sale</>}
                 </button>
-              )}
+                {todaysShopOrders.length > 0 && (
+                  <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysShopOrders}>
+                    <RefreshCw size={14} /> Clear today's list
+                  </button>
+                )}
+              </div>
             </div>
+
+            {draftType === "shop" && (
+              <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Walk-In Shop Sale — Draft</h3>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+                  <div style={{ flex: "1 1 240px" }}>
+                    <label>Product</label>
+                    <select value={draftProductId} onChange={(e) => setDraftProductId(e.target.value)}>
+                      {products.map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label>Qty</label>
+                    <input type="number" min="1" style={{ width: 70 }} value={draftProductQty} onChange={(e) => setDraftProductQty(Number(e.target.value))} />
+                  </div>
+                  <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftProductLine}><Plus size={13} /> Add</button>
+                </div>
+
+                {draftItems.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    {draftItems.map((i) => (
+                      <div key={i.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--line)", fontSize: 13.5 }}>
+                        <span>{i.name} × {i.qty}</span>
+                        <span style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          {money(i.price * i.qty)}
+                          <button className="rw-icon-btn" onClick={() => removeDraftItem(i.id)}><Trash2 size={13} color="#e0473f" /></button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="rw-form-grid" style={{ marginBottom: 12 }}>
+                  <div><label>Customer name</label><input value={draftFullName} onChange={(e) => setDraftFullName(e.target.value)} /></div>
+                  <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} /></div>
+                </div>
+                <div className="rw-pill-group" style={{ marginBottom: 12 }}>
+                  <button className={`rw-pill ${draftMode === "pickup" ? "active" : ""}`} onClick={() => setDraftMode("pickup")}>Pickup in store</button>
+                  <button className={`rw-pill ${draftMode === "delivery" ? "active" : ""}`} onClick={() => setDraftMode("delivery")}>Delivery</button>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <b style={{ fontSize: 15 }}>Total: {money(draftSubtotal)}</b>
+                  <button className="rw-btn rw-btn-rainbow" onClick={placeDraftShopOrder}>Place Order</button>
+                </div>
+              </div>
+            )}
+
             <table className="rw-table">
               <thead><tr><th>Ref</th><th>Placed</th><th>Name</th><th>Items</th><th>Fulfilment</th><th>Phone</th><th>Total</th><th>Status</th><th>Payment</th><th></th></tr></thead>
               <tbody>
@@ -635,8 +1185,10 @@ export default function Admin() {
                       </select>
                     </td>
                     <td style={{ display: "flex", gap: 4 }}>
-                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => openPrintSlip(o, currentUser)} title="Print slip"><Printer size={13} /></button>
-                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => archiveShopOrder(o.id)} title="Remove from today's list (kept in History)"><Archive size={13} /></button>
+                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => openPrintSlip(o, currentUser, () => markShopPrinted(o.id))} title="Print slip"><Printer size={13} /></button>
+                      {canDeleteOrder(o) && (
+                        <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => archiveShopOrder(o.id)} title="Remove from today's list (kept in History)"><Archive size={13} /></button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -765,76 +1317,150 @@ export default function Admin() {
             <div className="rw-admin-panel-head">
               <div>
                 <h2 style={{ marginBottom: 4 }}>Pricing Control Center</h2>
-                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Changes here instantly update prices across all customer-facing pages.</p>
+                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Changes here instantly update prices across all customer-facing pages. Add, rename, reprice or delete anything below.</p>
               </div>
             </div>
 
             <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Self-Wash Rates</h3>
-            <table className="rw-table" style={{ marginBottom: 24 }}>
-              <thead><tr><th>Service Name</th><th>Price (₦)</th></tr></thead>
+            <table className="rw-table" style={{ marginBottom: 10 }}>
+              <thead><tr><th>Service Name</th><th>Price (₦/kg)</th><th></th></tr></thead>
               <tbody>
                 {selfWashRates.map((r) => (
                   <tr key={r.id}>
-                    <td>{r.label}</td>
-                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateSelfWash(r.id, e.target.value)} /></td>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={r.label} onChange={(e) => updateSelfWash(r.id, "label", e.target.value)} /></td>
+                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateSelfWash(r.id, "price", e.target.value)} /></td>
+                    <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteSelfWash(r.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
+                <tr>
+                  <td><input placeholder="New service name" style={{ width: "100%", padding: "6px 8px" }} value={newSelfWash.label} onChange={(e) => setNewSelfWash((s) => ({ ...s, label: e.target.value }))} /></td>
+                  <td><input type="number" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newSelfWash.price} onChange={(e) => setNewSelfWash((s) => ({ ...s, price: e.target.value }))} /></td>
+                  <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addSelfWash}><Plus size={13} /></button></td>
+                </tr>
               </tbody>
             </table>
 
-            <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Staff-Wash Rates</h3>
-            <table className="rw-table" style={{ marginBottom: 24 }}>
-              <thead><tr><th>Service Name</th><th>Price (₦)</th></tr></thead>
+            <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8 }}>Staff-Wash Rates</h3>
+            <table className="rw-table" style={{ marginBottom: 10 }}>
+              <thead><tr><th>Service Name</th><th>Price (₦/kg)</th><th></th></tr></thead>
               <tbody>
                 {staffWashRates.map((r) => (
                   <tr key={r.id}>
-                    <td>{r.label}</td>
-                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateStaffWash(r.id, e.target.value)} /></td>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={r.label} onChange={(e) => updateStaffWash(r.id, "label", e.target.value)} /></td>
+                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateStaffWash(r.id, "price", e.target.value)} /></td>
+                    <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteStaffWash(r.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
+                <tr>
+                  <td><input placeholder="New service name" style={{ width: "100%", padding: "6px 8px" }} value={newStaffWash.label} onChange={(e) => setNewStaffWash((s) => ({ ...s, label: e.target.value }))} /></td>
+                  <td><input type="number" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newStaffWash.price} onChange={(e) => setNewStaffWash((s) => ({ ...s, price: e.target.value }))} /></td>
+                  <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addStaffWash}><Plus size={13} /></button></td>
+                </tr>
               </tbody>
             </table>
 
-            <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Dry Cleaning Items</h3>
-            <table className="rw-table" style={{ marginBottom: 24 }}>
-              <thead><tr><th>Item Name</th><th>Category</th><th>Price (₦)</th></tr></thead>
+            <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8 }}>Dry Cleaning Items</h3>
+            <table className="rw-table" style={{ marginBottom: 10 }}>
+              <thead><tr><th>Item Name</th><th>Regular (₦)</th><th>Deep Clean (₦)</th><th></th></tr></thead>
               <tbody>
                 {dryCleanItems.map((item) => (
                   <tr key={item.id}>
-                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={item.name} onChange={(e) => updateDryClean(item.id, "name", e.target.value)} /></td>
-                    <td>{item.category}</td>
-                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={item.price} onChange={(e) => updateDryClean(item.id, "price", e.target.value)} /></td>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={item.label} onChange={(e) => updateDryClean(item.id, "label", e.target.value)} /></td>
+                    <td><input type="number" step="100" style={{ width: 110, padding: "6px 8px" }} value={item.regular} onChange={(e) => updateDryClean(item.id, "regular", e.target.value)} /></td>
+                    <td><input type="number" step="100" style={{ width: 110, padding: "6px 8px" }} value={item.deep} onChange={(e) => updateDryClean(item.id, "deep", e.target.value)} /></td>
+                    <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteDryClean(item.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
+                <tr>
+                  <td><input placeholder="New item name" style={{ width: "100%", padding: "6px 8px" }} value={newDryClean.label} onChange={(e) => setNewDryClean((s) => ({ ...s, label: e.target.value }))} /></td>
+                  <td><input type="number" placeholder="Regular" style={{ width: 110, padding: "6px 8px" }} value={newDryClean.regular} onChange={(e) => setNewDryClean((s) => ({ ...s, regular: e.target.value }))} /></td>
+                  <td><input type="number" placeholder="Deep" style={{ width: 110, padding: "6px 8px" }} value={newDryClean.deep} onChange={(e) => setNewDryClean((s) => ({ ...s, deep: e.target.value }))} /></td>
+                  <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDryClean}><Plus size={13} /></button></td>
+                </tr>
               </tbody>
             </table>
 
-            <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Shoe Care Items</h3>
-            <table className="rw-table" style={{ marginBottom: 24 }}>
-              <thead><tr><th>Service Name</th><th>Price (₦)</th></tr></thead>
+            <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8 }}>Shoe Care Items</h3>
+            <table className="rw-table" style={{ marginBottom: 10 }}>
+              <thead><tr><th>Item Name</th><th>Regular (₦)</th><th>Deep Clean (₦)</th><th>Minor Repairs (₦)</th><th></th></tr></thead>
               <tbody>
                 {shoeCareItems.map((item) => (
                   <tr key={item.id}>
-                    <td>{item.name}</td>
-                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={item.price} onChange={(e) => updateShoeCare(item.id, "price", e.target.value)} /></td>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={item.label} onChange={(e) => updateShoeCare(item.id, "label", e.target.value)} /></td>
+                    <td><input type="number" step="100" style={{ width: 100, padding: "6px 8px" }} value={item.regular} onChange={(e) => updateShoeCare(item.id, "regular", e.target.value)} /></td>
+                    <td><input type="number" step="100" style={{ width: 100, padding: "6px 8px" }} value={item.deep} onChange={(e) => updateShoeCare(item.id, "deep", e.target.value)} /></td>
+                    <td><input type="number" step="100" style={{ width: 100, padding: "6px 8px" }} value={item.repair} onChange={(e) => updateShoeCare(item.id, "repair", e.target.value)} /></td>
+                    <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteShoeCare(item.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
+                <tr>
+                  <td><input placeholder="New item name" style={{ width: "100%", padding: "6px 8px" }} value={newShoeCare.label} onChange={(e) => setNewShoeCare((s) => ({ ...s, label: e.target.value }))} /></td>
+                  <td><input type="number" placeholder="Regular" style={{ width: 100, padding: "6px 8px" }} value={newShoeCare.regular} onChange={(e) => setNewShoeCare((s) => ({ ...s, regular: e.target.value }))} /></td>
+                  <td><input type="number" placeholder="Deep" style={{ width: 100, padding: "6px 8px" }} value={newShoeCare.deep} onChange={(e) => setNewShoeCare((s) => ({ ...s, deep: e.target.value }))} /></td>
+                  <td><input type="number" placeholder="Repair" style={{ width: 100, padding: "6px 8px" }} value={newShoeCare.repair} onChange={(e) => setNewShoeCare((s) => ({ ...s, repair: e.target.value }))} /></td>
+                  <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addShoeCare}><Plus size={13} /></button></td>
+                </tr>
               </tbody>
             </table>
 
-            <h3 style={{ fontSize: 16, marginTop: 16, marginBottom: 8 }}>Shop & Add-on Products</h3>
-            <table className="rw-table" style={{ marginBottom: 24 }}>
-              <thead><tr><th>Product / Addon</th><th>Group</th><th>Price (₦)</th></tr></thead>
+            <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Zap size={15} /> Express Services</h3>
+            <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -4, marginBottom: 10 }}>Covers Laundry, Upholstery and Cleaning — shown as its own category on Order Laundry.</p>
+            <table className="rw-table" style={{ marginBottom: 10 }}>
+              <thead><tr><th>Service Name</th><th>Price (₦)</th><th></th></tr></thead>
               <tbody>
-                {addonProducts.map((ap) => (
-                  <tr key={ap.id}>
-                    <td>{ap.label}</td>
-                    <td>{ap.group}</td>
-                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={ap.price} onChange={(e) => updateAddon(ap.id, e.target.value)} /></td>
+                {expressServices.map((r) => (
+                  <tr key={r.id}>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={r.label} onChange={(e) => updateExpress(r.id, "label", e.target.value)} /></td>
+                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateExpress(r.id, "price", e.target.value)} /></td>
+                    <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteExpress(r.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
+                <tr>
+                  <td><input placeholder="e.g. Express Duvet" style={{ width: "100%", padding: "6px 8px" }} value={newExpress.label} onChange={(e) => setNewExpress((s) => ({ ...s, label: e.target.value }))} /></td>
+                  <td><input type="number" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newExpress.price} onChange={(e) => setNewExpress((s) => ({ ...s, price: e.target.value }))} /></td>
+                  <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addExpress}><Plus size={13} /></button></td>
+                </tr>
               </tbody>
             </table>
+
+            <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8 }}>Shop & Add-on Products</h3>
+            <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -4, marginBottom: 10 }}>Grouped by category — Detergents, Starch, Bleach, Nylon, Bags, Extras.</p>
+            {ADDON_GROUPS.map((group) => {
+              const groupItems = addonProducts.filter((p) => p.group === group);
+              return (
+                <div key={group} style={{ marginBottom: 20 }}>
+                  <h4 style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--blue)", marginBottom: 8 }}>{group}</h4>
+                  <table className="rw-table">
+                    <thead><tr><th>Product</th><th>Price (₦)</th><th></th></tr></thead>
+                    <tbody>
+                      {groupItems.map((ap) => (
+                        <tr key={ap.id}>
+                          <td><input style={{ width: "100%", padding: "6px 8px" }} value={ap.label} onChange={(e) => updateAddon(ap.id, "label", e.target.value)} /></td>
+                          <td><input type="number" step="50" style={{ width: 110, padding: "6px 8px" }} value={ap.price} onChange={(e) => updateAddon(ap.id, "price", e.target.value)} /></td>
+                          <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteAddon(ap.id)}><Trash2 size={13} color="#e0473f" /></button></td>
+                        </tr>
+                      ))}
+                      {groupItems.length === 0 && (
+                        <tr><td colSpan={3} style={{ color: "var(--ink-soft)", fontSize: 13, padding: "10px 8px" }}>No products in this category yet.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+
+            <h4 style={{ fontSize: 14, marginBottom: 10 }}>Add a new product</h4>
+            <div className="rw-form-grid" style={{ marginBottom: 30, alignItems: "end" }}>
+              <div><label>Product name</label><input placeholder="e.g. Comfort Fabric Softener" value={newAddon.label} onChange={(e) => setNewAddon((s) => ({ ...s, label: e.target.value }))} /></div>
+              <div><label>Price (₦)</label><input type="number" placeholder="2500" value={newAddon.price} onChange={(e) => setNewAddon((s) => ({ ...s, price: e.target.value }))} /></div>
+              <div>
+                <label>Category</label>
+                <select value={newAddon.group} onChange={(e) => setNewAddon((s) => ({ ...s, group: e.target.value }))}>
+                  {ADDON_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
+              <button className="rw-btn rw-btn-primary" onClick={addAddon}><Plus size={15} /> Add Product</button>
+            </div>
           </div>
         )}
 
@@ -975,21 +1601,55 @@ export default function Admin() {
                           <br />
                           <span style={{ color: "var(--ink-soft)", fontSize: 12 }}>{emp.email}</span>
                         </span>
-                        <button
-                          type="button"
-                          className="rw-btn rw-btn-ghost rw-btn-sm"
-                          onClick={() => handleResetPassword(emp)}
-                          disabled={resettingId === emp.id}
-                          title="Generate a new password for this account"
-                        >
-                          <KeyRound size={13} /> {resettingId === emp.id ? "Resetting..." : "Reset Password"}
-                        </button>
+                        <span style={{ display: "flex", gap: 6 }}>
+                          <button
+                            type="button"
+                            className="rw-btn rw-btn-ghost rw-btn-sm"
+                            onClick={() => handleResetPassword(emp)}
+                            disabled={resettingId === emp.id}
+                            title="Generate a new password for this account"
+                          >
+                            <KeyRound size={13} /> {resettingId === emp.id ? "Resetting..." : "Reset Password"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rw-btn rw-btn-ghost rw-btn-sm"
+                            onClick={() => setConfirmDeleteEmp(emp)}
+                            title="Permanently delete this account"
+                          >
+                            <Trash2 size={13} color="#e0473f" />
+                          </button>
+                        </span>
                       </li>
                     ))}
                   </ul>
                 )}
               </div>
             </div>
+
+            {confirmDeleteEmp && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(7,26,47,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+                <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 400, width: "90%" }}>
+                  <h3 style={{ fontSize: 16, marginBottom: 10 }}>Permanently delete this account?</h3>
+                  <p style={{ fontSize: 13.5, color: "var(--ink-soft)", marginBottom: 20 }}>
+                    <b>{confirmDeleteEmp.fullName}</b> ({confirmDeleteEmp.email}) will lose access immediately and this
+                    cannot be undone. Only use this when someone has genuinely left the company — for a forgotten
+                    password, use "Reset Password" instead.
+                  </p>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                    <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteEmp(null)}>Cancel</button>
+                    <button
+                      className="rw-btn rw-btn-primary rw-btn-sm"
+                      style={{ background: "var(--bad)" }}
+                      onClick={() => handleDeleteEmployee(confirmDeleteEmp)}
+                      disabled={deletingEmpId === confirmDeleteEmp.id}
+                    >
+                      {deletingEmpId === confirmDeleteEmp.id ? "Deleting..." : "Yes, delete permanently"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

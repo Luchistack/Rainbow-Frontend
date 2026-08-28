@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   PRODUCTS, SELF_WASH_RATES, STAFF_WASH_RATES, DRY_CLEAN_ITEMS, SHOE_CARE_ITEMS,
-  ADDON_PRODUCTS, CLEANING_SERVICES,
+  ADDON_PRODUCTS, CLEANING_SERVICES, EXPRESS_SERVICES,
 } from "../data/constants";
-import { fetchCleaningServices, fetchBookings, fetchProducts } from "../api/api";
+import { fetchCleaningServices, fetchBookings, fetchProducts, fetchOrders, fetchShopOrders } from "../api/api";
 
 const AppContext = createContext(null);
 
@@ -113,6 +113,7 @@ export function AppProvider({ children }) {
   const [shoeCareItems, setShoeCareItems] = usePersistedState("shoeCareItems", SHOE_CARE_ITEMS);
   const [addonProducts, setAddonProducts] = usePersistedState("addonProducts", ADDON_PRODUCTS);
   const [cleaningServices, setCleaningServices] = usePersistedState("cleaningServices", CLEANING_SERVICES);
+  const [expressServices, setExpressServices] = usePersistedState("expressServices", EXPRESS_SERVICES);
 
   const [laundryOrders, setLaundryOrders] = usePersistedState("laundryOrders", SEED_LAUNDRY_ORDERS);
   const [bookings, setBookings] = usePersistedState("bookings", SEED_BOOKINGS);
@@ -174,6 +175,35 @@ export function AppProvider({ children }) {
     loadBookings();
   }, [currentUser]);
 
+  // Fetch real laundry orders and shop orders from the backend once staff are
+  // logged in — same reasoning as bookings above: GET requires a JWT, so these
+  // only fire after a successful staff/manager/admin login.
+  useEffect(() => {
+    if (!currentUser) return;
+    const loadOrders = async () => {
+      try {
+        const data = await fetchOrders();
+        if (data) setLaundryOrders(data);
+      } catch (error) {
+        // Falls back to whatever's in localStorage if the backend call fails
+      }
+    };
+    loadOrders();
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const loadShopOrders = async () => {
+      try {
+        const data = await fetchShopOrders();
+        if (data) setShopOrders(data);
+      } catch (error) {
+        // Falls back to whatever's in localStorage if the backend call fails
+      }
+    };
+    loadShopOrders();
+  }, [currentUser]);
+
   const notify = (msg) => {
     setToast(msg);
     setTimeout(() => setToast(""), 3200);
@@ -191,6 +221,7 @@ export function AppProvider({ children }) {
     shoeCareItems, setShoeCareItems,
     addonProducts, setAddonProducts,
     cleaningServices, setCleaningServices,
+    expressServices, setExpressServices,
     laundryOrders, setLaundryOrders,
     bookings, setBookings,
     shopOrders, setShopOrders,

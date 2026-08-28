@@ -51,33 +51,44 @@ export const SHOE_CARE_ITEMS = [
   { id: "sc-leathershoes", label: "Leather Shoes", regular: 4000, deep: 5000, repair: 2000 },
 ];
 
-// Add-on products, grouped so the order builder shows them in sensible sections
-// (liquids together, starch together, nylon/bags together, small extras together).
-export const ADDON_GROUPS = ["Detergents & Softeners", "Starch", "Stain Removers & Extras", "Nylon & Bags"];
+// Add-on products, grouped into distinct category headers as requested:
+// Detergents, Bags, Nylon, Starch, Bleach, Extras.
+export const ADDON_GROUPS = ["Detergents", "Starch", "Bleach", "Nylon", "Bags", "Extras"];
 export const ADDON_PRODUCTS = [
-  { id: "ad-softener-small", label: "Fabric Softener (small)", price: 2500, group: "Detergents & Softeners" },
-  { id: "ad-softener-big", label: "Fabric Softener (big)", price: 25000, group: "Detergents & Softeners" },
-  { id: "ad-detergent-small", label: "Liquid Detergent (small)", price: 2500, group: "Detergents & Softeners" },
-  { id: "ad-detergent-big", label: "Liquid Detergent (big)", price: 25000, group: "Detergents & Softeners" },
-  { id: "ad-soklin-smart", label: "So Klin Smart", price: 500, group: "Detergents & Softeners" },
-  { id: "ad-soklin-detergent", label: "So Klin Detergent (small)", price: 1000, group: "Detergents & Softeners" },
-  { id: "ad-viva-small", label: "Viva Detergent (small)", price: 700, group: "Detergents & Softeners" },
-  { id: "ad-viva-big", label: "Viva Detergent (big)", price: 3000, group: "Detergents & Softeners" },
+  { id: "ad-softener-small", label: "Fabric Softener (small)", price: 2500, group: "Detergents" },
+  { id: "ad-softener-big", label: "Fabric Softener (big)", price: 25000, group: "Detergents" },
+  { id: "ad-detergent-small", label: "Liquid Detergent (small)", price: 2500, group: "Detergents" },
+  { id: "ad-detergent-big", label: "Liquid Detergent (big)", price: 25000, group: "Detergents" },
+  { id: "ad-soklin-smart", label: "So Klin Smart", price: 500, group: "Detergents" },
+  { id: "ad-soklin-detergent", label: "So Klin Detergent (small)", price: 1000, group: "Detergents" },
+  { id: "ad-viva-small", label: "Viva Detergent (small)", price: 700, group: "Detergents" },
+  { id: "ad-viva-big", label: "Viva Detergent (big)", price: 3000, group: "Detergents" },
   { id: "ad-starch-niagara", label: "Starch, Original Lavender Niagara (per cloth)", price: 500, group: "Starch" },
   { id: "ad-starch-faultless", label: "Starch, Heavy Lavender Faultless (per cloth)", price: 500, group: "Starch" },
   { id: "ad-starch-braxton", label: "Starch, Heavy Amindon Lourd Braxton5 (per cloth)", price: 500, group: "Starch" },
-  { id: "ad-stain-minor", label: "Minor Stain Remover (per cloth)", price: 500, group: "Stain Removers & Extras" },
-  { id: "ad-stain-regular", label: "Regular Stain Remover (per cloth)", price: 1000, group: "Stain Removers & Extras" },
-  { id: "ad-stain-tuff", label: "Tuff Stain Remover (per cloth)", price: 2000, group: "Stain Removers & Extras" },
-  { id: "ad-scentbeads", label: "Scent Beads (per cap)", price: 500, group: "Stain Removers & Extras" },
-  { id: "ad-tiepod", label: "Tiepod", price: 1000, group: "Stain Removers & Extras" },
-  { id: "ad-shoebag", label: "Shoe Bag", price: 1000, group: "Nylon & Bags" },
-  { id: "ad-suitebag", label: "Suite Bag", price: 4000, group: "Nylon & Bags" },
-  { id: "ad-nylon-xl", label: "Nylon XL", price: 1500, group: "Nylon & Bags" },
-  { id: "ad-nylon-l", label: "Nylon L", price: 1000, group: "Nylon & Bags" },
-  { id: "ad-nylon-m", label: "Nylon M", price: 500, group: "Nylon & Bags" },
-  { id: "ad-nylon-s", label: "Nylon S", price: 300, group: "Nylon & Bags" },
-  { id: "ad-bag", label: "Bag", price: 5500, group: "Nylon & Bags" },
+  { id: "ad-bleach-small", label: "Bleach (small)", price: 1500, group: "Bleach" },
+  { id: "ad-bleach-big", label: "Bleach (big)", price: 4500, group: "Bleach" },
+  { id: "ad-nylon-xl", label: "Nylon XL", price: 1500, group: "Nylon" },
+  { id: "ad-nylon-l", label: "Nylon L", price: 1000, group: "Nylon" },
+  { id: "ad-nylon-m", label: "Nylon M", price: 500, group: "Nylon" },
+  { id: "ad-nylon-s", label: "Nylon S", price: 300, group: "Nylon" },
+  { id: "ad-shoebag", label: "Shoe Bag", price: 1000, group: "Bags" },
+  { id: "ad-suitebag", label: "Suite Bag", price: 4000, group: "Bags" },
+  { id: "ad-bag", label: "Bag", price: 5500, group: "Bags" },
+  { id: "ad-stain-minor", label: "Minor Stain Remover (per cloth)", price: 500, group: "Extras" },
+  { id: "ad-stain-regular", label: "Regular Stain Remover (per cloth)", price: 1000, group: "Extras" },
+  { id: "ad-stain-tuff", label: "Tuff Stain Remover (per cloth)", price: 2000, group: "Extras" },
+  { id: "ad-scentbeads", label: "Scent Beads (per cap)", price: 500, group: "Extras" },
+  { id: "ad-tiepod", label: "Tiepod", price: 1000, group: "Extras" },
+];
+
+// Express service — same category shape as Dry Cleaning/Shoe Care (a flat
+// per-item/per-load surcharge), covering Laundry, Upholstery and Cleaning.
+// Fully editable by Manager/Admin in the Pricing tab, same as everything else.
+export const EXPRESS_SERVICES = [
+  { id: "ex-laundry", label: "Express Laundry (same-day)", price: 2000 },
+  { id: "ex-upholstery", label: "Express Upholstery (same-day)", price: 5000 },
+  { id: "ex-cleaning", label: "Express Cleaning (same-day)", price: 5000 },
 ];
 
 // Home/Office/Deep Clean/Upholstery — internal reference prices only.

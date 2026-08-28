@@ -7,6 +7,7 @@ import FAQ from "../components/FAQ";
 import { TRACK_STAGES } from "../data/constants";
 import { money } from "../utils/format";
 import { useApp } from "../context/AppContext";
+import { trackOrder } from "../api/api";
 
 const TRACK_STEPS = [
   { title: "Received", desc: "Your items have arrived at Rainbow Wash and are logged against your reference." },
@@ -24,8 +25,29 @@ const TRACK_FAQ = [
 export default function TrackOrder() {
   const { laundryOrders } = useApp();
   const [query, setQuery] = useState("");
+  const [found, setFound] = useState(null);
+  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const found = laundryOrders.find((o) => o.id.toLowerCase() === query.trim().toLowerCase());
+  const runSearch = async () => {
+    const ref = query.trim();
+    if (!ref) return;
+    setLoading(true);
+    setSearched(true);
+    try {
+      const result = await trackOrder(ref);
+      if (result) {
+        setFound(result);
+      } else {
+        setFound(laundryOrders.find((o) => o.id.toLowerCase() === ref.toLowerCase()) || null);
+      }
+    } catch {
+      setFound(laundryOrders.find((o) => o.id.toLowerCase() === ref.toLowerCase()) || null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const stageIndex = found ? TRACK_STAGES.indexOf(found.status) : -1;
 
   return (
@@ -34,11 +56,16 @@ export default function TrackOrder() {
       <div className="rw-section" style={{ maxWidth: 720, paddingBottom: 40 }}>
         <div className="rw-card">
           <div style={{ display: "flex", gap: 10 }}>
-            <input placeholder="e.g. LND-4821" value={query} onChange={(e) => setQuery(e.target.value)} />
-            <button className="rw-btn rw-btn-primary"><Search size={16} /></button>
+            <input
+              placeholder="e.g. LND-4821"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runSearch()}
+            />
+            <button className="rw-btn rw-btn-primary" onClick={runSearch} disabled={loading}><Search size={16} /></button>
           </div>
 
-          {query && !found && (
+          {searched && !loading && !found && (
             <p style={{ color: "var(--bad)", marginTop: 16, fontSize: 14.5 }}>
               No order found with that reference. Try one of the demo IDs below, or place a new order.
             </p>

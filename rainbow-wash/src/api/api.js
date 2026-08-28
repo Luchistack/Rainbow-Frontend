@@ -9,6 +9,14 @@ const getAuthHeaders = () => {
   };
 };
 
+// The backend returns entities with a numeric `id` (the real DB primary key)
+// plus a separate human-readable `referenceId` (e.g. "LND-A1B2C3"). Every part
+// of this app displays and searches by that human reference as `.id` — so we
+// remap here, once, in one place: `.id` becomes the display reference, and the
+// real numeric key is kept under `.dbId` for any follow-up PATCH/update calls.
+const mapRef = (obj) => (obj && obj.referenceId ? { ...obj, id: obj.referenceId, dbId: obj.id } : obj);
+const mapRefList = (arr) => (Array.isArray(arr) ? arr.map(mapRef) : arr);
+
 // --- AUTH ---
 export const loginAdmin = async ({ email, password }) => {
   const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -74,7 +82,7 @@ export const createBooking = async (bookingData) => {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.message || 'Failed to create booking');
-  return data;
+  return mapRef(data);
 };
 
 export const fetchBookings = async () => {
@@ -82,7 +90,18 @@ export const fetchBookings = async () => {
     headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error('Failed to fetch bookings');
-  return await response.json();
+  return mapRefList(await response.json());
+};
+
+// Partial update — status, confirmed price (payable), payment status, archived, printed.
+export const updateBooking = async (dbId, patch) => {
+  const response = await fetch(`${API_BASE_URL}/bookings/${dbId}`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) throw new Error('Failed to update booking');
+  return mapRef(await response.json());
 };
 
 // --- PRODUCTS ---
@@ -143,15 +162,16 @@ export const deleteLaundryService = async (id) => {
 };
 
 
-// --- ORDERS ---
+// --- LAUNDRY ORDERS ---
 export const createOrder = async (orderData) => {
   const response = await fetch(`${API_BASE_URL}/orders`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: JSON.stringify(orderData),
   });
-  if (!response.ok) throw new Error('Failed to create order');
-  return await response.json();
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create order');
+  return mapRef(data);
 };
 
 export const fetchOrders = async () => {
@@ -159,16 +179,59 @@ export const fetchOrders = async () => {
     headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error('Failed to fetch orders');
-  return await response.json();
+  return mapRefList(await response.json());
 };
 
-export const updateOrderStatus = async (id, status) => {
-  const response = await fetch(`${API_BASE_URL}/orders/${id}/status?status=${status}`, {
+// Public — used by the Track Order page, no login required. Returns null if
+// nothing matches that reference (rather than throwing), since "not found" is
+// an expected result here, not an error.
+export const trackOrder = async (referenceId) => {
+  const response = await fetch(`${API_BASE_URL}/orders/track/${encodeURIComponent(referenceId)}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Failed to look up order');
+  return mapRef(await response.json());
+};
+
+// Partial update — status, total, payment status, archived, printed.
+export const updateOrder = async (dbId, patch) => {
+  const response = await fetch(`${API_BASE_URL}/orders/${dbId}`, {
     method: 'PATCH',
     headers: getAuthHeaders(),
+    body: JSON.stringify(patch),
   });
-  if (!response.ok) throw new Error('Failed to update order status');
-  return await response.json();
+  if (!response.ok) throw new Error('Failed to update order');
+  return mapRef(await response.json());
+};
+
+// --- SHOP ORDERS ---
+export const createShopOrder = async (orderData) => {
+  const response = await fetch(`${API_BASE_URL}/shop-orders`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(orderData),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Failed to create shop order');
+  return mapRef(data);
+};
+
+export const fetchShopOrders = async () => {
+  const response = await fetch(`${API_BASE_URL}/shop-orders`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Failed to fetch shop orders');
+  return mapRefList(await response.json());
+};
+
+// Partial update — status, payment status, archived, printed.
+export const updateShopOrder = async (dbId, patch) => {
+  const response = await fetch(`${API_BASE_URL}/shop-orders/${dbId}`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(patch),
+  });
+  if (!response.ok) throw new Error('Failed to update shop order');
+  return mapRef(await response.json());
 };
 
 // --- ADMIN / EMPLOYEES ---
@@ -200,4 +263,16 @@ export const resetEmployeePassword = async (id) => {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to reset password');
   return data; // { message, tempPassword }
+};
+
+export const deleteEmployee = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/admin/employees/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to delete account');
+  }
+  return true;
 };

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   CheckCircle2, Minus, Plus, Truck, CreditCard, Phone, Mail, User,
-  Shirt, Users, Sparkles, Package, ShoppingBag, Trash2, Landmark, Copy,
+  Shirt, Users, Sparkles, Package, ShoppingBag, Trash2, Landmark, Copy, Zap,
 } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import FAQ from "../components/FAQ";
@@ -11,12 +11,14 @@ import {
 } from "../data/constants";
 import { money, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
+import { createOrder } from "../api/api";
 
 const CATEGORIES = [
   { id: "selfwash", label: "Self Wash", icon: Shirt },
   { id: "staffwash", label: "Staff Wash", icon: Users },
   { id: "dryclean", label: "Dry Cleaning", icon: Sparkles },
   { id: "shoecare", label: "Shoe & Leather Care", icon: Package },
+  { id: "express", label: "Express", icon: Zap },
   { id: "extras", label: "Add Extras", icon: ShoppingBag },
 ];
 
@@ -56,7 +58,7 @@ function buildReceipt(order) {
 }
 
 export default function OrderLaundry() {
-  const { setLaundryOrders, notify, selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts } = useApp();
+  const { setLaundryOrders, notify, selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, expressServices } = useApp();
 
   const [category, setCategory] = useState("selfwash");
   const [items, setItems] = useState([]);
@@ -67,6 +69,8 @@ export default function OrderLaundry() {
   const [dcItemId, setDcItemId] = useState(dryCleanItems[0].id);
   const [dcType, setDcType] = useState("regular");
   const [dcQty, setDcQty] = useState(1);
+  const [exItemId, setExItemId] = useState(expressServices[0].id);
+  const [exQty, setExQty] = useState(1);
   const [scItemId, setScItemId] = useState(shoeCareItems[0].id);
   const [scType, setScType] = useState("regular");
   const [scQty, setScQty] = useState(1);
@@ -114,6 +118,11 @@ export default function OrderLaundry() {
     addItem(name, dcQty, price, "");
   };
 
+  const addExpressLine = () => {
+    const item = expressServices.find((i) => i.id === exItemId);
+    addItem(item.label, exQty, item.price, "");
+  };
+
   const addShoeCareLine = () => {
     const item = shoeCareItems.find((i) => i.id === scItemId);
     const price = scType === "deep" ? item.deep : scType === "repair" ? item.repair : item.regular;
@@ -131,7 +140,7 @@ export default function OrderLaundry() {
     notify("Account number copied");
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (items.length === 0) {
       notify("Add at least one item to your order first");
       return;
@@ -144,7 +153,8 @@ export default function OrderLaundry() {
       notify("Please add a phone number so we can call you when it's ready");
       return;
     }
-    const order = {
+
+    const localOrder = {
       id: genRef("LND"),
       items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, unit: i.unit })),
       fulfilment, address, date, time, payment, transferNote,
@@ -154,6 +164,22 @@ export default function OrderLaundry() {
       archived: false,
       total, status: "Received",
     };
+
+    let order = localOrder;
+    try {
+      const saved = await createOrder({
+        items: items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, price: i.price })),
+        fulfilment, address,
+        preferredDate: date, preferredTime: time,
+        paymentMethod: payment, transferNote,
+        total, fullName, phone, email,
+      });
+      order = saved || localOrder;
+    } catch (err) {
+      // Backend unreachable — still lets the customer complete their order and
+      // get a reference, just not synced to the dashboard until it's retried.
+    }
+
     setLaundryOrders((os) => [order, ...os]);
     setPlaced(order);
     notify(`Order ${order.id} placed, ${money(total)} via ${payment}`);
@@ -263,6 +289,33 @@ export default function OrderLaundry() {
                     </div>
                   </div>
                   <button className="rw-btn rw-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={addDryCleanLine}>
+                    <Plus size={15} /> Add to order
+                  </button>
+                </div>
+              )}
+
+              {category === "express" && (
+                <div>
+                  <div className="rw-field">
+                    <label>Express service</label>
+                    <select value={exItemId} onChange={(e) => setExItemId(e.target.value)}>
+                      {expressServices.map((i) => (
+                        <option key={i.id} value={i.id}>{i.label}, {money(i.price)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="rw-field">
+                    <label>Quantity</label>
+                    <div className="rw-stepper">
+                      <button onClick={() => setExQty((q) => Math.max(1, q - 1))}><Minus size={15} /></button>
+                      <span style={{ fontWeight: 700, minWidth: 40, textAlign: "center" }}>{exQty}</span>
+                      <button onClick={() => setExQty((q) => q + 1)}><Plus size={15} /></button>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 14 }}>
+                    Add an Express line alongside your laundry, upholstery or cleaning items for same-day turnaround.
+                  </p>
+                  <button className="rw-btn rw-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={addExpressLine}>
                     <Plus size={15} /> Add to order
                   </button>
                 </div>
