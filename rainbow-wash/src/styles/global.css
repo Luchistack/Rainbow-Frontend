@@ -75,7 +75,7 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 /* NAVBAR & MOBILE TOGGLE */
 .rw-nav { position: sticky; top: 0; z-index: 50; background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 .rw-nav-inner { 
-  max-width: 1180px; 
+  max-width: 1440px;
   margin: 0 auto; 
   display: flex; 
   align-items: center; 
@@ -214,9 +214,9 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-hero-inner {
   position: relative;
   z-index: 2;
-  max-width: 1180px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 90px 20px 120px;
+  padding: 90px 32px 120px;
   width: 100%;
 }
 @media (max-width: 900px) {
@@ -248,7 +248,7 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 .rw-wave-front { opacity: 1; }
 
 /* SECTIONS & CARDS */
-.rw-section { max-width: 1180px; margin: 0 auto; padding: 70px 20px; }
+.rw-section { max-width: 1440px; margin: 0 auto; padding: 70px 32px; }
 .rw-section-head { text-align: center; max-width: 640px; margin: 0 auto 44px; }
 .rw-kicker { color: var(--blue); font-weight: 800; font-size: 18.5px; letter-spacing: 0.09em; text-transform: uppercase; }
 .rw-section-head h2 { font-size: 40px; margin: 10px 0 12px; }
@@ -322,8 +322,7 @@ label { font-size: 20.5px; font-weight: 700; color: var(--ink-soft); display: bl
 
 /* FOOTER */
 .rw-footer { background: linear-gradient(180deg, var(--navy-deep), #051526); color: #cfe2f2; margin-top: auto; width: 100%; overflow-x: hidden; }
-.rw-footer-inner { max-width: 1180px; margin: 0 auto; padding: 45px 20px 40px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
-
+.rw-footer-inner { max-width: 1440px; margin: 0 auto; padding: 45px 32px 40px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px; }
 @media (max-width: 900px) { 
   .rw-footer-inner { grid-template-columns: repeat(2, 1fr); gap: 24px; } 
 }

@@ -222,12 +222,15 @@ export function AppProvider({ children }) {
 
   // On-demand sync — lets a staff member pull the latest orders/bookings/shop
   // orders right now instead of waiting for the 20-second background refresh.
-  const refreshAll = async () => {
+    const refreshAll = async () => {
     const results = await Promise.allSettled([fetchOrders(), fetchBookings(), fetchShopOrders()]);
     if (results[0].status === "fulfilled" && results[0].value) setLaundryOrders(results[0].value);
     if (results[1].status === "fulfilled" && results[1].value) setBookings(results[1].value);
     if (results[2].status === "fulfilled" && results[2].value) setShopOrders(results[2].value);
-    return results.every((r) => r.status === "fulfilled");
+    // "Success" here just means at least one of the three came through — a
+    // single slow/failed endpoint shouldn't make the whole refresh look like
+    // a dead server when the other two genuinely did update.
+    return results.some((r) => r.status === "fulfilled");
   };
 
   const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart]);

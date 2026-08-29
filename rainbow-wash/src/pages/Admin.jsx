@@ -783,7 +783,7 @@ export default function Admin() {
           </div>
         </div>
         <button
-          onClick={async () => { notify("Refreshing…"); const ok = await refreshAll(); notify(ok ? "Up to date" : "Couldn't reach the server, showing last known data"); }}
+          onClick={async () => { notify("Refreshing…"); const ok = await refreshAll(); if (ok) notify("Up to date"); }}
           style={{ marginBottom: 6 }}
         >
           <RefreshCw size={16} /> Refresh Now
@@ -929,14 +929,20 @@ export default function Admin() {
                     <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftExpressLine}><Plus size={13} /> Add</button>
                   </div>
                 )}
-
                 {draftCategory === "shop" && (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
                     <div style={{ flex: "1 1 220px" }}>
                       <label>Shop product</label>
-                      <select value={draftProductId} onChange={(e) => setDraftProductId(e.target.value)}>
-                        {products.filter((p) => (p.status || "Active") === "Active").map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
-                      </select>
+                      {products.filter((p) => (p.status || "Active") === "Active").length === 0 ? (
+                        <p style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>No active shop products yet, add some under Inventory first.</p>
+                      ) : (
+                        <select
+                          value={draftProductId || products.filter((p) => (p.status || "Active") === "Active")[0]?.id || ""}
+                          onChange={(e) => setDraftProductId(e.target.value)}
+                        >
+                          {products.filter((p) => (p.status || "Active") === "Active").map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
+                        </select>
+                      )}
                     </div>
                     <div>
                       <label>Qty</label>
@@ -1148,12 +1154,19 @@ export default function Admin() {
             {draftType === "shop" && (
               <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
                 <h3 style={{ fontSize: 15, marginBottom: 12 }}>Walk-In Shop Sale — Draft</h3>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
                   <div style={{ flex: "1 1 240px" }}>
                     <label>Product</label>
-                    <select value={draftProductId} onChange={(e) => setDraftProductId(e.target.value)}>
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
-                    </select>
+                    {products.filter((p) => (p.status || "Active") === "Active").length === 0 ? (
+                      <p style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>No active shop products yet, add some under Inventory first.</p>
+                    ) : (
+                      <select
+                        value={draftProductId || products.filter((p) => (p.status || "Active") === "Active")[0]?.id || ""}
+                        onChange={(e) => setDraftProductId(e.target.value)}
+                      >
+                        {products.filter((p) => (p.status || "Active") === "Active").map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label>Qty</label>
