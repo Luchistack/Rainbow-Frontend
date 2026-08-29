@@ -104,6 +104,16 @@ export const updateBooking = async (dbId, patch) => {
   return mapRef(await response.json());
 };
 
+// Admin only — permanent removal, used from the History tab's delete action.
+export const deleteBooking = async (dbId) => {
+  const response = await fetch(`${API_BASE_URL}/bookings/${dbId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Failed to delete booking');
+  return true;
+};
+
 // --- PRODUCTS ---
 export const fetchProducts = async () => {
   const response = await fetch(`${API_BASE_URL}/products`, {
@@ -203,6 +213,16 @@ export const updateOrder = async (dbId, patch) => {
   return mapRef(await response.json());
 };
 
+// Admin only — permanent removal, used from the History tab's delete action.
+export const deleteOrder = async (dbId) => {
+  const response = await fetch(`${API_BASE_URL}/orders/${dbId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Failed to delete order');
+  return true;
+};
+
 // --- SHOP ORDERS ---
 export const createShopOrder = async (orderData) => {
   const response = await fetch(`${API_BASE_URL}/shop-orders`, {
@@ -232,6 +252,16 @@ export const updateShopOrder = async (dbId, patch) => {
   });
   if (!response.ok) throw new Error('Failed to update shop order');
   return mapRef(await response.json());
+};
+
+// Admin only — permanent removal, used from the History tab's delete action.
+export const deleteShopOrder = async (dbId) => {
+  const response = await fetch(`${API_BASE_URL}/shop-orders/${dbId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Failed to delete shop order');
+  return true;
 };
 
 // --- ADMIN / EMPLOYEES ---

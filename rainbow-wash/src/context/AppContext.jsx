@@ -30,6 +30,18 @@ function usePersistedState(key, initialValue) {
   return [state, setState];
 }
 
+// A background refresh should NEVER be able to make an order/booking vanish.
+// If something was placed while the backend save silently failed (a network
+// blip, a validation hiccup, anything), it only exists in local state — it
+// has no real `dbId` yet. Blindly replacing the whole list with whatever the
+// backend returns would erase that record the moment the next poll runs,
+// even though nothing was ever actually deleted. This keeps any not-yet-
+// synced local record around until it genuinely appears in a fresh fetch.
+function mergeKeepingUnsynced(prevList, freshList) {
+  const stillUnsynced = prevList.filter((item) => !item.dbId);
+  return [...stillUnsynced, ...freshList];
+}
+
 const SEED_LAUNDRY_ORDERS = [
   {
     id: "LND-4821",
@@ -166,7 +178,7 @@ export function AppProvider({ children }) {
       try {
         const data = await fetchBookings();
         if (data) {
-          setBookings(data);
+          setBookings((prev) => mergeKeepingUnsynced(prev, data));
         }
       } catch (error) {
         // Falls back to whatever's already loaded if the backend call fails
@@ -190,7 +202,7 @@ export function AppProvider({ children }) {
     const loadOrders = async () => {
       try {
         const data = await fetchOrders();
-        if (data) setLaundryOrders(data);
+        if (data) setLaundryOrders((prev) => mergeKeepingUnsynced(prev, data));
       } catch (error) {
         // Falls back to whatever's already loaded if the backend call fails
       }
@@ -198,7 +210,7 @@ export function AppProvider({ children }) {
     const loadShopOrders = async () => {
       try {
         const data = await fetchShopOrders();
-        if (data) setShopOrders(data);
+        if (data) setShopOrders((prev) => mergeKeepingUnsynced(prev, data));
       } catch (error) {
         // Falls back to whatever's already loaded if the backend call fails
       }
@@ -222,11 +234,11 @@ export function AppProvider({ children }) {
 
   // On-demand sync — lets a staff member pull the latest orders/bookings/shop
   // orders right now instead of waiting for the 20-second background refresh.
-    const refreshAll = async () => {
+  const refreshAll = async () => {
     const results = await Promise.allSettled([fetchOrders(), fetchBookings(), fetchShopOrders()]);
-    if (results[0].status === "fulfilled" && results[0].value) setLaundryOrders(results[0].value);
-    if (results[1].status === "fulfilled" && results[1].value) setBookings(results[1].value);
-    if (results[2].status === "fulfilled" && results[2].value) setShopOrders(results[2].value);
+    if (results[0].status === "fulfilled" && results[0].value) setLaundryOrders((prev) => mergeKeepingUnsynced(prev, results[0].value));
+    if (results[1].status === "fulfilled" && results[1].value) setBookings((prev) => mergeKeepingUnsynced(prev, results[1].value));
+    if (results[2].status === "fulfilled" && results[2].value) setShopOrders((prev) => mergeKeepingUnsynced(prev, results[2].value));
     // "Success" here just means at least one of the three came through — a
     // single slow/failed endpoint shouldn't make the whole refresh look like
     // a dead server when the other two genuinely did update.

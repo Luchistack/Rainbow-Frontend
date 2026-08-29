@@ -13,7 +13,7 @@ import { openPrintSlip } from "../utils/print";
 import {
   loginAdmin, logoutUser, createEmployee, fetchEmployees, resetEmployeePassword, deleteEmployee, changePassword,
   createProduct, updateProduct, deleteProduct, createBooking, updateBooking,
-  createOrder, updateOrder, createShopOrder, updateShopOrder,
+  createOrder, updateOrder, deleteOrder, createShopOrder, updateShopOrder, deleteShopOrder, deleteBooking,
 } from "../api/api";
 
 const MIN_UNIT = 5;
@@ -75,6 +75,10 @@ export default function Admin() {
   // Confirmation gate before permanently deleting a staff/manager account.
   const [confirmDeleteEmp, setConfirmDeleteEmp] = useState(null);
   const [deletingEmpId, setDeletingEmpId] = useState(null);
+
+  // Confirmation gate before permanently deleting a History record (Admin only).
+  const [confirmDeleteHistoryRow, setConfirmDeleteHistoryRow] = useState(null);
+  const [deletingHistoryKey, setDeletingHistoryKey] = useState(null);
 
   // --- Walk-in / offline order drafting ---
   // Each of the three order types gets its own "open a draft" toggle. While a
@@ -547,6 +551,34 @@ export default function Admin() {
     }
   };
 
+  // --- Permanent History deletion (Admin only) ---
+  // Archiving just hides a record from the Today's list; this actually
+  // removes it forever, both from the backend and every browser polling it.
+  const handleDeleteHistoryRow = async (row) => {
+    setDeletingHistoryKey(row.key);
+    try {
+      if (row.type === "Laundry") {
+        const target = laundryOrders.find((o) => o.id === row.ref);
+        if (target?.dbId) await deleteOrder(target.dbId);
+        setLaundryOrders((os) => os.filter((o) => o.id !== row.ref));
+      } else if (row.type === "Cleaning") {
+        const target = bookings.find((b) => b.id === row.ref);
+        if (target?.dbId) await deleteBooking(target.dbId);
+        setBookings((bs) => bs.filter((b) => b.id !== row.ref));
+      } else if (row.type === "Shop") {
+        const target = shopOrders.find((o) => o.id === row.ref);
+        if (target?.dbId) await deleteShopOrder(target.dbId);
+        setShopOrders((os) => os.filter((o) => o.id !== row.ref));
+      }
+      notify(`${row.ref} permanently deleted.`);
+      setConfirmDeleteHistoryRow(null);
+    } catch (err) {
+      notify(err.message || "Failed to delete this record");
+    } finally {
+      setDeletingHistoryKey(null);
+    }
+  };
+
   // --- Order locking (walk-in & web orders alike) ---
   // "locked" is true the moment an order exists in a Today's table (it's been
   // submitted) — from then on, regular Staff can no longer edit its content or
@@ -620,8 +652,17 @@ export default function Admin() {
     if (!item) return;
     addDraftItem(item.label, draftExQty, item.price, "");
   };
+  // Combines the real Shop inventory with the Pricing tab's add-on catalog —
+  // from a walk-in customer's point of view these are all just "things we can
+  // sell them right now", so anything added or edited in either place should
+  // immediately be pickable here, not just items created through Inventory.
+  const shopPickerItems = [
+    ...products.filter((p) => (p.status || "Active") === "Active").map((p) => ({ id: p.id, name: p.name, price: p.price })),
+    ...addonProducts.map((a) => ({ id: a.id, name: a.label, price: a.price })),
+  ];
+
   const addDraftProductLine = () => {
-    const product = products.find((p) => p.id === draftProductId);
+    const product = shopPickerItems.find((p) => p.id === draftProductId);
     if (!product) return;
     addDraftItem(product.name, draftProductQty, product.price, "");
   };
@@ -929,18 +970,19 @@ export default function Admin() {
                     <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftExpressLine}><Plus size={13} /> Add</button>
                   </div>
                 )}
+
                 {draftCategory === "shop" && (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
                     <div style={{ flex: "1 1 220px" }}>
                       <label>Shop product</label>
-                      {products.filter((p) => (p.status || "Active") === "Active").length === 0 ? (
-                        <p style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>No active shop products yet, add some under Inventory first.</p>
+                      {shopPickerItems.length === 0 ? (
+                        <p style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>No shop products yet, add some under Inventory or Pricing first.</p>
                       ) : (
                         <select
-                          value={draftProductId || products.filter((p) => (p.status || "Active") === "Active")[0]?.id || ""}
+                          value={draftProductId || shopPickerItems[0]?.id || ""}
                           onChange={(e) => setDraftProductId(e.target.value)}
                         >
-                          {products.filter((p) => (p.status || "Active") === "Active").map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
+                          {shopPickerItems.map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
                         </select>
                       )}
                     </div>
@@ -1154,17 +1196,17 @@ export default function Admin() {
             {draftType === "shop" && (
               <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
                 <h3 style={{ fontSize: 15, marginBottom: 12 }}>Walk-In Shop Sale — Draft</h3>
-                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
                   <div style={{ flex: "1 1 240px" }}>
                     <label>Product</label>
-                    {products.filter((p) => (p.status || "Active") === "Active").length === 0 ? (
-                      <p style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>No active shop products yet, add some under Inventory first.</p>
+                    {shopPickerItems.length === 0 ? (
+                      <p style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>No shop products yet, add some under Inventory or Pricing first.</p>
                     ) : (
                       <select
-                        value={draftProductId || products.filter((p) => (p.status || "Active") === "Active")[0]?.id || ""}
+                        value={draftProductId || shopPickerItems[0]?.id || ""}
                         onChange={(e) => setDraftProductId(e.target.value)}
                       >
-                        {products.filter((p) => (p.status || "Active") === "Active").map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
+                        {shopPickerItems.map((p) => <option key={p.id} value={p.id}>{p.name}, {money(p.price)}</option>)}
                       </select>
                     )}
                   </div>
@@ -1255,7 +1297,8 @@ export default function Admin() {
           <div>
             <h2 style={{ marginBottom: 6 }}>History</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 13.5, marginBottom: 18 }}>
-              Every laundry order, cleaning booking and shop purchase ever placed, searchable, nothing deleted, nothing editable here.
+              Every laundry order, cleaning booking and shop purchase ever placed, searchable. Nothing is editable
+              here{canSeeOverview ? ", but as Admin you can permanently delete a record if it genuinely needs to go." : ", nothing can be deleted here — only an Admin can permanently remove a record."}
             </p>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
@@ -1274,7 +1317,7 @@ export default function Admin() {
             </div>
 
             <table className="rw-table">
-              <thead><tr><th>Type</th><th>Ref</th><th>Placed</th><th>Name</th><th>Phone</th><th>Email</th><th>Details</th><th>Total</th><th>Status</th><th>Payment</th></tr></thead>
+              <thead><tr><th>Type</th><th>Ref</th><th>Placed</th><th>Name</th><th>Phone</th><th>Email</th><th>Details</th><th>Total</th><th>Status</th><th>Payment</th>{canSeeOverview && <th></th>}</tr></thead>
               <tbody>
                 {historyRows.map((r) => (
                   <tr key={r.key}>
@@ -1288,13 +1331,43 @@ export default function Admin() {
                     <td>{money(r.total)}</td>
                     <td>{r.status}</td>
                     <td>{r.paymentStatus || "—"}</td>
+                    {canSeeOverview && (
+                      <td>
+                        <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteHistoryRow(r)} title="Permanently delete this record">
+                          <Trash2 size={13} color="#e0473f" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {historyRows.length === 0 && (
-                  <tr><td colSpan={10} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No records match that search and time range.</td></tr>
+                  <tr><td colSpan={canSeeOverview ? 11 : 10} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No records match that search and time range.</td></tr>
                 )}
               </tbody>
             </table>
+
+            {confirmDeleteHistoryRow && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(7,26,47,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+                <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 400, width: "90%" }}>
+                  <h3 style={{ fontSize: 16, marginBottom: 10 }}>Permanently delete this record?</h3>
+                  <p style={{ fontSize: 13.5, color: "var(--ink-soft)", marginBottom: 20 }}>
+                    <b>{confirmDeleteHistoryRow.ref}</b> ({confirmDeleteHistoryRow.name || "no name"}) will be gone for good,
+                    for every Staff, Manager and Admin, on every device. This cannot be undone.
+                  </p>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                    <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteHistoryRow(null)}>Cancel</button>
+                    <button
+                      className="rw-btn rw-btn-primary rw-btn-sm"
+                      style={{ background: "var(--bad)" }}
+                      onClick={() => handleDeleteHistoryRow(confirmDeleteHistoryRow)}
+                      disabled={deletingHistoryKey === confirmDeleteHistoryRow.key}
+                    >
+                      {deletingHistoryKey === confirmDeleteHistoryRow.key ? "Deleting..." : "Yes, delete permanently"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
                 {tab === "inventory" && canEditPricing && (
@@ -1364,8 +1437,7 @@ export default function Admin() {
             </table>
           </div>
         )}
-
-        {tab === "pricing" && canEditPricing && (
+                {tab === "pricing" && canEditPricing && (
           <div>
             <div className="rw-admin-panel-head">
               <div>
