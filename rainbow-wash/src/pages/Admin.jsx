@@ -14,6 +14,7 @@ import {
   loginAdmin, logoutUser, createEmployee, fetchEmployees, resetEmployeePassword, deleteEmployee, changePassword,
   createProduct, updateProduct, deleteProduct, createBooking, updateBooking,
   createOrder, updateOrder, deleteOrder, createShopOrder, updateShopOrder, deleteShopOrder, deleteBooking,
+  createLaundryService, updateLaundryService, deleteLaundryService,
 } from "../api/api";
 
 const MIN_UNIT = 5;
@@ -32,10 +33,8 @@ export default function Admin() {
   const {
     laundryOrders, setLaundryOrders, bookings, setBookings, shopOrders, setShopOrders,
     products, setProducts,
-    selfWashRates, setSelfWashRates, staffWashRates, setStaffWashRates,
-    dryCleanItems, setDryCleanItems, shoeCareItems, setShoeCareItems,
-    addonProducts, setAddonProducts, expressServices, setExpressServices,
-    cleaningServices,
+    selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, expressServices, cleaningServices,
+    refreshServices,
     currentUser, setCurrentUser, refreshAll,
     notify,
   } = useApp();
@@ -316,13 +315,11 @@ export default function Admin() {
   const updateShopMethod = (id, paymentMethod) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentMethod } : o))); persistShopOrder(id, { paymentMethod }); };
 
   // --- Inventory: local field edits (as-you-type, no network call) ---
+  // Shop products (this Inventory tab) and the Pricing tab's add-on catalog
+  // are now two separate real systems (Product vs LaundryService) — no more
+  // cross-syncing a Shop edit into the pricing catalog automatically.
   const updateProductField = (id, field, value) => {
     setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
-    if (field === "price" || field === "name") {
-      setAddonProducts((aps) =>
-        aps.map((ap) => (ap.id === id || ap.label === products.find(p => p.id === id)?.name ? { ...ap, [field === "name" ? "label" : field]: value } : ap))
-      );
-    }
   };
 
   // --- Inventory: persist a product's current field values to the backend.
@@ -355,7 +352,6 @@ export default function Admin() {
     try {
       await deleteProduct(id);
       setProducts((ps) => ps.filter((p) => p.id !== id));
-      setAddonProducts((aps) => aps.filter((ap) => ap.id !== id));
     } catch (err) {
       notify("Failed to delete product");
     }
@@ -392,10 +388,6 @@ export default function Admin() {
       });
 
       setProducts((ps) => [...ps, saved]);
-      setAddonProducts((aps) => [
-        ...aps,
-        { id: saved.id, label: saved.name, price: saved.price, group: "Shop & Retail Items" }
-      ]);
 
       setNewName("");
       setNewPrice("");
@@ -483,57 +475,131 @@ export default function Admin() {
     }
   };
 
-  // --- Pricing: full CRUD (rename, reprice, add, delete) across every category.
-  // All Manager/Admin-only, gated at the tab level by canEditPricing. ---
-  const updateSelfWash = (id, field, value) => setSelfWashRates((rs) => rs.map((r) => (r.id === id ? { ...r, [field]: field === "label" ? value : Number(value) } : r)));
-  const deleteSelfWash = (id) => setSelfWashRates((rs) => rs.filter((r) => r.id !== id));
-  const addSelfWash = () => {
+  // --- Pricing: full CRUD (rename, reprice, add, delete) across every
+  // category. All Manager/Admin-only, gated at the tab level by
+  // canEditPricing, and now genuinely persisted — every one of these calls
+  // hits the real /api/services backend and then re-fetches, so a price
+  // change shows up for every device within seconds, not just this browser. ---
+  const updateSelfWash = async (id, field, value) => {
+    const item = selfWashRates.find((r) => r.id === id);
+    if (!item) return;
+    try {
+      await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: "Self Wash", stock: 5, available: true });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to save"); }
+  };
+  const deleteSelfWash = async (id) => {
+    try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
+  };
+  const addSelfWash = async () => {
     if (!newSelfWash.label.trim() || newSelfWash.price === "") return;
-    setSelfWashRates((rs) => [...rs, { id: `sw-${Date.now()}`, label: newSelfWash.label.trim(), unit: "kg", price: Number(newSelfWash.price) }]);
-    setNewSelfWash({ label: "", price: "" });
+    try {
+      await createLaundryService({ name: newSelfWash.label.trim(), price: Number(newSelfWash.price), category: "Self Wash", stock: 5, available: true });
+      setNewSelfWash({ label: "", price: "" });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateStaffWash = (id, field, value) => setStaffWashRates((rs) => rs.map((r) => (r.id === id ? { ...r, [field]: field === "label" ? value : Number(value) } : r)));
-  const deleteStaffWash = (id) => setStaffWashRates((rs) => rs.filter((r) => r.id !== id));
-  const addStaffWash = () => {
+  const updateStaffWash = async (id, field, value) => {
+    const item = staffWashRates.find((r) => r.id === id);
+    if (!item) return;
+    try {
+      await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: "Staff Wash", stock: 5, available: true });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to save"); }
+  };
+  const deleteStaffWash = async (id) => {
+    try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
+  };
+  const addStaffWash = async () => {
     if (!newStaffWash.label.trim() || newStaffWash.price === "") return;
-    setStaffWashRates((rs) => [...rs, { id: `stw-${Date.now()}`, label: newStaffWash.label.trim(), unit: "kg", price: Number(newStaffWash.price) }]);
-    setNewStaffWash({ label: "", price: "" });
+    try {
+      await createLaundryService({ name: newStaffWash.label.trim(), price: Number(newStaffWash.price), category: "Staff Wash", stock: 5, available: true });
+      setNewStaffWash({ label: "", price: "" });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateDryClean = (id, field, value) => setDryCleanItems((its) => its.map((i) => (i.id === id ? { ...i, [field]: field === "label" ? value : Number(value) } : i)));
-  const deleteDryClean = (id) => setDryCleanItems((its) => its.filter((i) => i.id !== id));
-  const addDryClean = () => {
+  const updateDryClean = async (id, field, value) => {
+    const item = dryCleanItems.find((i) => i.id === id);
+    if (!item) return;
+    const next = { ...item, [field]: field === "label" ? value : Number(value) };
+    try {
+      await updateLaundryService(id, { name: next.label, price: next.regular, deepPrice: next.deep, category: "Dry Cleaning", stock: 5, available: true });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to save"); }
+  };
+  const deleteDryClean = async (id) => {
+    try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
+  };
+  const addDryClean = async () => {
     if (!newDryClean.label.trim() || newDryClean.regular === "" || newDryClean.deep === "") return;
-    setDryCleanItems((its) => [...its, { id: `dc-${Date.now()}`, label: newDryClean.label.trim(), regular: Number(newDryClean.regular), deep: Number(newDryClean.deep) }]);
-    setNewDryClean({ label: "", regular: "", deep: "" });
+    try {
+      await createLaundryService({ name: newDryClean.label.trim(), price: Number(newDryClean.regular), deepPrice: Number(newDryClean.deep), category: "Dry Cleaning", stock: 5, available: true });
+      setNewDryClean({ label: "", regular: "", deep: "" });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateShoeCare = (id, field, value) => setShoeCareItems((its) => its.map((i) => (i.id === id ? { ...i, [field]: field === "label" ? value : Number(value) } : i)));
-  const deleteShoeCare = (id) => setShoeCareItems((its) => its.filter((i) => i.id !== id));
-  const addShoeCare = () => {
+  const updateShoeCare = async (id, field, value) => {
+    const item = shoeCareItems.find((i) => i.id === id);
+    if (!item) return;
+    const next = { ...item, [field]: field === "label" ? value : Number(value) };
+    try {
+      await updateLaundryService(id, { name: next.label, price: next.regular, deepPrice: next.deep, repairPrice: next.repair, category: "Shoe Care", stock: 5, available: true });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to save"); }
+  };
+  const deleteShoeCare = async (id) => {
+    try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
+  };
+  const addShoeCare = async () => {
     if (!newShoeCare.label.trim() || newShoeCare.regular === "" || newShoeCare.deep === "" || newShoeCare.repair === "") return;
-    setShoeCareItems((its) => [...its, { id: `sc-${Date.now()}`, label: newShoeCare.label.trim(), regular: Number(newShoeCare.regular), deep: Number(newShoeCare.deep), repair: Number(newShoeCare.repair) }]);
-    setNewShoeCare({ label: "", regular: "", deep: "", repair: "" });
+    try {
+      await createLaundryService({ name: newShoeCare.label.trim(), price: Number(newShoeCare.regular), deepPrice: Number(newShoeCare.deep), repairPrice: Number(newShoeCare.repair), category: "Shoe Care", stock: 5, available: true });
+      setNewShoeCare({ label: "", regular: "", deep: "", repair: "" });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateExpress = (id, field, value) => setExpressServices((its) => its.map((i) => (i.id === id ? { ...i, [field]: field === "label" ? value : Number(value) } : i)));
-  const deleteExpress = (id) => setExpressServices((its) => its.filter((i) => i.id !== id));
-  const addExpress = () => {
+  const updateExpress = async (id, field, value) => {
+    const item = expressServices.find((i) => i.id === id);
+    if (!item) return;
+    try {
+      await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: "Express", stock: 5, available: true });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to save"); }
+  };
+  const deleteExpress = async (id) => {
+    try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
+  };
+  const addExpress = async () => {
     if (!newExpress.label.trim() || newExpress.price === "") return;
-    setExpressServices((its) => [...its, { id: `ex-${Date.now()}`, label: newExpress.label.trim(), price: Number(newExpress.price) }]);
-    setNewExpress({ label: "", price: "" });
+    try {
+      await createLaundryService({ name: newExpress.label.trim(), price: Number(newExpress.price), category: "Express", stock: 5, available: true });
+      setNewExpress({ label: "", price: "" });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateAddon = (id, field, value) => {
-    setAddonProducts((ps) => ps.map((p) => (p.id === id ? { ...p, [field]: field === "price" ? Number(value) : value } : p)));
-    if (field === "price") setProducts((ps) => ps.map((p) => (p.id === id ? { ...p, price: Number(value) } : p)));
+  const updateAddon = async (id, field, value) => {
+    const item = addonProducts.find((p) => p.id === id);
+    if (!item) return;
+    try {
+      await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: item.group, stock: 5, available: true });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to save"); }
   };
-  const deleteAddon = (id) => setAddonProducts((ps) => ps.filter((p) => p.id !== id));
-  const addAddon = () => {
+  const deleteAddon = async (id) => {
+    try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
+  };
+  const addAddon = async () => {
     if (!newAddon.label.trim() || newAddon.price === "") return;
-    setAddonProducts((ps) => [...ps, { id: `ad-${Date.now()}`, label: newAddon.label.trim(), price: Number(newAddon.price), group: newAddon.group }]);
-    setNewAddon({ label: "", price: "", group: ADDON_GROUPS[0] });
+    try {
+      await createLaundryService({ name: newAddon.label.trim(), price: Number(newAddon.price), category: newAddon.group, stock: 5, available: true });
+      setNewAddon({ label: "", price: "", group: ADDON_GROUPS[0] });
+      refreshServices();
+    } catch (err) { notify(err.message || "Failed to add"); }
   };
 
   // --- Staff Account Deletion (Admin only, cannot delete Admin accounts) ---
@@ -1370,7 +1436,7 @@ export default function Admin() {
             )}
           </div>
         )}
-                {tab === "inventory" && canEditPricing && (
+        {tab === "inventory" && canEditPricing && (
           <div>
             <div className="rw-admin-panel-head"><h2>Inventory</h2></div>
 

@@ -1,9 +1,57 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   PRODUCTS, SELF_WASH_RATES, STAFF_WASH_RATES, DRY_CLEAN_ITEMS, SHOE_CARE_ITEMS,
-  ADDON_PRODUCTS, CLEANING_SERVICES, EXPRESS_SERVICES,
+  ADDON_PRODUCTS, CLEANING_SERVICES, EXPRESS_SERVICES, ADDON_GROUPS,
 } from "../data/constants";
 import { fetchCleaningServices, fetchBookings, fetchProducts, fetchOrders, fetchShopOrders } from "../api/api";
+
+const CLEANING_PARENT_LABELS = ["Home Cleaning", "Office Cleaning", "Deep Cleaning", "Upholstery Cleaning"];
+
+// Every non-Shop price on the site (Self Wash, Staff Wash, Dry Cleaning, Shoe
+// Care, Express, Add-ons, and Cleaning Service sizes) now lives as one flat,
+// real, backend-synced list — the same `/api/services` catalog that was
+// already built and working for Cleaning Services. Rather than build five
+// more near-identical backend entities, everything is just tagged with a
+// `category` and, where needed, `deepPrice`/`repairPrice`. These helpers turn
+// that flat list into the exact shapes every page already expects, so
+// OrderLaundry.jsx, BookCleaning.jsx, Services.jsx and Admin.jsx's Pricing
+// tab don't need to change how they read this data at all.
+function deriveGroupedServices(allServices) {
+  const byCategory = (cat) => allServices.filter((s) => s.category === cat);
+
+  const selfWashRates = byCategory("Self Wash").map((s) => ({ id: s.id, label: s.name, unit: "kg", price: s.price }));
+  const staffWashRates = byCategory("Staff Wash").map((s) => ({ id: s.id, label: s.name, unit: "kg", price: s.price }));
+  const dryCleanItems = byCategory("Dry Cleaning").map((s) => ({ id: s.id, label: s.name, regular: s.price, deep: s.deepPrice }));
+  const shoeCareItems = byCategory("Shoe Care").map((s) => ({ id: s.id, label: s.name, regular: s.price, deep: s.deepPrice, repair: s.repairPrice }));
+  const expressServices = byCategory("Express").map((s) => ({ id: s.id, label: s.name, price: s.price }));
+  const addonProducts = allServices
+    .filter((s) => ADDON_GROUPS.includes(s.category))
+    .map((s) => ({ id: s.id, label: s.name, price: s.price, group: s.category }));
+  const cleaningServices = CLEANING_PARENT_LABELS
+    .map((label) => ({
+      id: label.toLowerCase().replace(/\s+/g, "-"),
+      label,
+      sizes: byCategory(label).map((s) => ({ id: s.id, label: s.name, price: s.price })),
+    }))
+    .filter((cs) => cs.sizes.length > 0);
+
+  return { selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, expressServices, addonProducts, cleaningServices };
+}
+
+// What's shown before the first successful fetch (or if the backend is briefly
+// unreachable) — the same numbers that used to be hardcoded, just reshaped
+// into the flat catalog format so the derive function above works on it too.
+function buildFallbackServices() {
+  const flat = [];
+  SELF_WASH_RATES.forEach((r) => flat.push({ id: r.id, name: r.label, price: r.price, deepPrice: null, repairPrice: null, category: "Self Wash" }));
+  STAFF_WASH_RATES.forEach((r) => flat.push({ id: r.id, name: r.label, price: r.price, deepPrice: null, repairPrice: null, category: "Staff Wash" }));
+  DRY_CLEAN_ITEMS.forEach((i) => flat.push({ id: i.id, name: i.label, price: i.regular, deepPrice: i.deep, repairPrice: null, category: "Dry Cleaning" }));
+  SHOE_CARE_ITEMS.forEach((i) => flat.push({ id: i.id, name: i.label, price: i.regular, deepPrice: i.deep, repairPrice: i.repair, category: "Shoe Care" }));
+  EXPRESS_SERVICES.forEach((i) => flat.push({ id: i.id, name: i.label, price: i.price, deepPrice: null, repairPrice: null, category: "Express" }));
+  ADDON_PRODUCTS.forEach((p) => flat.push({ id: p.id, name: p.label, price: p.price, deepPrice: null, repairPrice: null, category: p.group }));
+  CLEANING_SERVICES.forEach((cs) => cs.sizes.forEach((sz) => flat.push({ id: `${cs.id}-${sz.id}`, name: sz.label, price: sz.price, deepPrice: null, repairPrice: null, category: cs.label })));
+  return flat;
+}
 
 const AppContext = createContext(null);
 
@@ -116,16 +164,26 @@ export function AppProvider({ children }) {
   // shown before the fetch resolves or if the backend is unreachable.
   const [products, setProducts] = usePersistedState("products", PRODUCTS);
 
-  // Service pricing — editable by Manager/Admin in the dashboard's Pricing
-  // tab. Every customer-facing page reads these live from context instead
-  // of the static constants, so a price edit reflects everywhere instantly.
-  const [selfWashRates, setSelfWashRates] = usePersistedState("selfWashRates", SELF_WASH_RATES);
-  const [staffWashRates, setStaffWashRates] = usePersistedState("staffWashRates", STAFF_WASH_RATES);
-  const [dryCleanItems, setDryCleanItems] = usePersistedState("dryCleanItems", DRY_CLEAN_ITEMS);
-  const [shoeCareItems, setShoeCareItems] = usePersistedState("shoeCareItems", SHOE_CARE_ITEMS);
-  const [addonProducts, setAddonProducts] = usePersistedState("addonProducts", ADDON_PRODUCTS);
-  const [cleaningServices, setCleaningServices] = usePersistedState("cleaningServices", CLEANING_SERVICES);
-  const [expressServices, setExpressServices] = usePersistedState("expressServices", EXPRESS_SERVICES);
+  // Service pricing — Self Wash, Staff Wash, Dry Cleaning, Shoe Care, Express,
+  // Add-ons, and Cleaning Service sizes are now all one real, backend-synced
+  // catalog (see deriveGroupedServices above). Editable by Manager/Admin in
+  // the dashboard's Pricing tab; every customer-facing page reads the derived
+  // values below live, so a price edit reflects everywhere instantly, on
+  // every device, not just the browser that made the change.
+  const [allServices, setAllServices] = usePersistedState("allServices", buildFallbackServices());
+  const {
+    selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, expressServices, addonProducts, cleaningServices,
+  } = useMemo(() => deriveGroupedServices(allServices), [allServices]);
+
+  const refreshServices = async () => {
+    try {
+      const data = await fetchCleaningServices(); // hits GET /api/services — the whole flat catalog
+      if (data) setAllServices(data);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
 
   const [laundryOrders, setLaundryOrders] = usePersistedState("laundryOrders", SEED_LAUNDRY_ORDERS);
   const [bookings, setBookings] = usePersistedState("bookings", SEED_BOOKINGS);
@@ -137,19 +195,12 @@ export function AppProvider({ children }) {
   // Team accounts state persisted across sessions
   const [teamAccounts, setTeamAccounts] = usePersistedState("teamAccounts", DEFAULT_TEAM_ACCOUNTS);
 
-  // Fetch live cleaning services from backend on mount
+  // Fetch the full pricing catalog from the backend on mount — public
+  // endpoint, so this works for anonymous customers browsing Order Laundry,
+  // Services and Book Cleaning too, not just logged-in staff.
   useEffect(() => {
-    const loadBackendData = async () => {
-      try {
-        const data = await fetchCleaningServices();
-        if (data) {
-          setCleaningServices(data);
-        }
-      } catch (error) {
-        // Fallback gracefully to local storage / constants if backend is offline
-      }
-    };
-    loadBackendData();
+    refreshServices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch real shop products from the backend on mount. GET /api/products is
@@ -252,13 +303,8 @@ export function AppProvider({ children }) {
     cart, setCart, cartCount,
     toast, notify,
     products, setProducts,
-    selfWashRates, setSelfWashRates,
-    staffWashRates, setStaffWashRates,
-    dryCleanItems, setDryCleanItems,
-    shoeCareItems, setShoeCareItems,
-    addonProducts, setAddonProducts,
-    cleaningServices, setCleaningServices,
-    expressServices, setExpressServices,
+    allServices, refreshServices,
+    selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, cleaningServices, expressServices,
     laundryOrders, setLaundryOrders,
     bookings, setBookings,
     shopOrders, setShopOrders,
