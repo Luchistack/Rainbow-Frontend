@@ -189,14 +189,6 @@ export default function Admin() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, canSeeOverview]);
-
-  // Pricing (and Shop products) load from the backend a moment after this
-  // page first renders — before that, walk-in draft pickers default to
-  // whatever's available at that instant. Without this, a selection made (or
-  // defaulted) before the real data arrives would silently point at nothing
-  // once it does, and "Add" would just do nothing with no visible error. This
-  // keeps every draft picker's selected id valid any time its underlying
-  // price list changes, self-healing automatically rather than getting stuck.
   useEffect(() => {
     const source = draftCategory === "selfwash" ? selfWashRates : staffWashRates;
     if (source.length && !source.find((r) => r.id === draftWashRateId)) setDraftWashRateId(source[0].id);
@@ -648,7 +640,7 @@ export default function Admin() {
   // --- Permanent History deletion (Admin only) ---
   // Archiving just hides a record from the Today's list; this actually
   // removes it forever, both from the backend and every browser polling it.
-    const handleDeleteHistoryRow = async (row) => {
+  const handleDeleteHistoryRow = async (row) => {
     setDeletingHistoryKey(row.key);
     try {
       if (row.type === "Laundry") {
@@ -725,25 +717,26 @@ export default function Admin() {
   const addDraftWashLine = () => {
     const isSelf = draftCategory === "selfwash";
     const rate = (isSelf ? selfWashRates : staffWashRates).find((r) => r.id === draftWashRateId);
-    if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
+        if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
     addDraftItem(`${isSelf ? "Self Wash" : "Staff Wash"}, ${rate.label}`, draftWashWeight, rate.price, "kg");
   };
   const addDraftDryCleanLine = () => {
     const item = dryCleanItems.find((i) => i.id === draftDcItemId);
-    if (!item) { notify("Prices are still loading, try again in a moment"); return; }
+        if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
     const price = draftDcType === "deep" ? item.deep : item.regular;
     addDraftItem(`${item.label} (${draftDcType === "deep" ? "Deep Clean" : "Regular"})`, draftDcQty, price, "");
   };
   const addDraftShoeCareLine = () => {
     const item = shoeCareItems.find((i) => i.id === draftScItemId);
-    if (!item) { notify("Prices are still loading, try again in a moment"); return; }
+        if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
     const price = draftScType === "deep" ? item.deep : draftScType === "repair" ? item.repair : item.regular;
     const typeLabel = draftScType === "deep" ? "Deep Clean" : draftScType === "repair" ? "Minor Repairs" : "Regular";
     addDraftItem(`${item.label} (${typeLabel})`, draftScQty, price, "");
   };
   const addDraftExpressLine = () => {
     const item = expressServices.find((i) => i.id === draftExItemId);
-    if (!item) { notify("Prices are still loading, try again in a moment"); return; }
+        if (!item) { notify("Prices are still loading, try again in a moment"); return; }
+      
     addDraftItem(item.label, draftExQty, item.price, "");
   };
   // Combines the real Shop inventory with the Pricing tab's add-on catalog —
@@ -755,14 +748,14 @@ export default function Admin() {
     ...addonProducts.map((a) => ({ id: a.id, name: a.label, price: a.price })),
   ];
 
-  useEffect(() => {
+    useEffect(() => {
     if (shopPickerItems.length && !shopPickerItems.find((p) => p.id === draftProductId)) setDraftProductId(shopPickerItems[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, addonProducts]);
 
   const addDraftProductLine = () => {
     const product = shopPickerItems.find((p) => p.id === draftProductId);
-    if (!product) { notify("Products are still loading, try again in a moment"); return; }
+        if (!product) { notify("Products are still loading, try again in a moment"); return; }
     addDraftItem(product.name, draftProductQty, product.price, "");
   };
 
@@ -1469,7 +1462,7 @@ export default function Admin() {
             )}
           </div>
         )}
-                {tab === "inventory" && canEditPricing && (
+        {tab === "inventory" && canEditPricing && (
           <div>
             <div className="rw-admin-panel-head"><h2>Inventory</h2></div>
 
@@ -1536,8 +1529,7 @@ export default function Admin() {
             </table>
           </div>
         )}
-
-        {tab === "pricing" && canEditPricing && (
+                {tab === "pricing" && canEditPricing && (
           <div>
             <div className="rw-admin-panel-head">
               <div>
