@@ -363,7 +363,7 @@ export default function Admin() {
   };
 
   const updateProductStatus = (id, status) => {
-       const updated = { ...products.find((p) => String(p.id) === String(id)), status };
+    const updated = { ...products.find((p) => p.id === id), status };
     setProducts((ps) => ps.map((p) => (p.id === id ? updated : p)));
     persistProduct(updated);
   };

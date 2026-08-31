@@ -199,22 +199,22 @@ export default function Admin() {
   // price list changes, self-healing automatically rather than getting stuck.
   useEffect(() => {
     const source = draftCategory === "selfwash" ? selfWashRates : staffWashRates;
-    if (source.length && !source.find((r) => String(r.id) === String(draftWashRateId))) setDraftWashRateId(source[0].id);
+    if (source.length && !source.find((r) => r.id === draftWashRateId)) setDraftWashRateId(source[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftCategory, selfWashRates, staffWashRates]);
 
   useEffect(() => {
-    if (dryCleanItems.length && !dryCleanItems.find((i) => String(i.id) === String(draftDcItemId))) setDraftDcItemId(dryCleanItems[0].id);
+    if (dryCleanItems.length && !dryCleanItems.find((i) => i.id === draftDcItemId)) setDraftDcItemId(dryCleanItems[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dryCleanItems]);
 
   useEffect(() => {
-    if (shoeCareItems.length && !shoeCareItems.find((i) => String(i.id) === String(draftScItemId))) setDraftScItemId(shoeCareItems[0].id);
+    if (shoeCareItems.length && !shoeCareItems.find((i) => i.id === draftScItemId)) setDraftScItemId(shoeCareItems[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shoeCareItems]);
 
   useEffect(() => {
-    if (expressServices.length && !expressServices.find((i) => String(i.id) === String(draftExItemId))) setDraftExItemId(expressServices[0].id);
+    if (expressServices.length && !expressServices.find((i) => i.id === draftExItemId)) setDraftExItemId(expressServices[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expressServices]);
 
@@ -314,7 +314,7 @@ export default function Admin() {
   // ever existed locally, e.g. from before the backend was wired up, or if an
   // API call failed at creation time, are simply skipped here, not an error). ---
   const persistOrder = (id, patch) => {
-    const target = laundryOrders.find((o) => String(o.id) === String(id));
+    const target = laundryOrders.find((o) => o.id === id);
     if (!target?.dbId) return;
     updateOrder(target.dbId, patch).catch(() => notify("Saved locally, but failed to sync to the server"));
   };
@@ -324,7 +324,7 @@ export default function Admin() {
   const updateOrderMethod = (id, paymentMethod) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, paymentMethod } : o))); persistOrder(id, { paymentMethod }); };
 
   const persistBookingUpdate = (id, patch) => {
-    const target = bookings.find((b) => String(b.id) === String(id));
+    const target = bookings.find((b) => b.id === id);
     if (!target?.dbId) return;
     updateBooking(target.dbId, patch).catch(() => notify("Saved locally, but failed to sync to the server"));
   };
@@ -334,7 +334,7 @@ export default function Admin() {
   const updateBookingMethod = (id, paymentMethod) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, paymentMethod } : b))); persistBookingUpdate(id, { paymentMethod }); };
 
   const persistShopOrder = (id, patch) => {
-    const target = shopOrders.find((o) => String(o.id) === String(id));
+    const target = shopOrders.find((o) => o.id === id);
     if (!target?.dbId) return;
     updateShopOrder(target.dbId, patch).catch(() => notify("Saved locally, but failed to sync to the server"));
   };
@@ -363,13 +363,13 @@ export default function Admin() {
   };
 
   const updateProductStatus = (id, status) => {
-       const updated = { ...products.find((p) => String(p.id) === String(id)), status };
+    const updated = { ...products.find((p) => p.id === id), status };
     setProducts((ps) => ps.map((p) => (p.id === id ? updated : p)));
     persistProduct(updated);
   };
 
   const restock = (id) => {
-    const target = products.find((p) => String(p.id) === String(id));
+    const target = products.find((p) => p.id === id);
     if (!target) return;
     const updated = { ...target, stock: target.stock + RESTOCK_STEP };
     setProducts((ps) => ps.map((p) => (p.id === id ? updated : p)));
@@ -509,7 +509,7 @@ export default function Admin() {
   // hits the real /api/services backend and then re-fetches, so a price
   // change shows up for every device within seconds, not just this browser. ---
   const updateSelfWash = async (id, field, value) => {
-    const item = selfWashRates.find((r) => String(r.id) === String(id));
+    const item = selfWashRates.find((r) => r.id === id);
     if (!item) return;
     try {
       await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: "Self Wash", stock: 5, available: true });
@@ -529,7 +529,7 @@ export default function Admin() {
   };
 
   const updateStaffWash = async (id, field, value) => {
-    const item = staffWashRates.find((r) => String(r.id) === String(id));
+    const item = staffWashRates.find((r) => r.id === id);
     if (!item) return;
     try {
       await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: "Staff Wash", stock: 5, available: true });
@@ -549,7 +549,7 @@ export default function Admin() {
   };
 
   const updateDryClean = async (id, field, value) => {
-    const item = dryCleanItems.find((i) => String(i.id) === String(id));
+    const item = dryCleanItems.find((i) => i.id === id);
     if (!item) return;
     const next = { ...item, [field]: field === "label" ? value : Number(value) };
     try {
@@ -570,7 +570,7 @@ export default function Admin() {
   };
 
   const updateShoeCare = async (id, field, value) => {
-    const item = shoeCareItems.find((i) => String(i.id) === String(id));
+    const item = shoeCareItems.find((i) => i.id === id);
     if (!item) return;
     const next = { ...item, [field]: field === "label" ? value : Number(value) };
     try {
@@ -591,7 +591,7 @@ export default function Admin() {
   };
 
   const updateExpress = async (id, field, value) => {
-    const item = expressServices.find((i) => String(i.id) === String(id));
+    const item = expressServices.find((i) => i.id === id);
     if (!item) return;
     try {
       await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: "Express", stock: 5, available: true });
@@ -611,7 +611,7 @@ export default function Admin() {
   };
 
   const updateAddon = async (id, field, value) => {
-    const item = addonProducts.find((p) => String(p.id) === String(id));
+    const item = addonProducts.find((p) => p.id === id);
     if (!item) return;
     try {
       await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: item.group, stock: 5, available: true });
@@ -724,25 +724,25 @@ export default function Admin() {
 
   const addDraftWashLine = () => {
     const isSelf = draftCategory === "selfwash";
-    const rate = (isSelf ? selfWashRates : staffWashRates).find((r) => String(r.id) === String(draftWashRateId));
+    const rate = (isSelf ? selfWashRates : staffWashRates).find((r) => r.id === draftWashRateId);
     if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
     addDraftItem(`${isSelf ? "Self Wash" : "Staff Wash"}, ${rate.label}`, draftWashWeight, rate.price, "kg");
   };
   const addDraftDryCleanLine = () => {
-    const item = dryCleanItems.find((i) => String(i.id) === String(draftDcItemId));
+    const item = dryCleanItems.find((i) => i.id === draftDcItemId);
     if (!item) { notify("Prices are still loading, try again in a moment"); return; }
     const price = draftDcType === "deep" ? item.deep : item.regular;
     addDraftItem(`${item.label} (${draftDcType === "deep" ? "Deep Clean" : "Regular"})`, draftDcQty, price, "");
   };
   const addDraftShoeCareLine = () => {
-    const item = shoeCareItems.find((i) => String(i.id) === String(draftScItemId));
+    const item = shoeCareItems.find((i) => i.id === draftScItemId);
     if (!item) { notify("Prices are still loading, try again in a moment"); return; }
     const price = draftScType === "deep" ? item.deep : draftScType === "repair" ? item.repair : item.regular;
     const typeLabel = draftScType === "deep" ? "Deep Clean" : draftScType === "repair" ? "Minor Repairs" : "Regular";
     addDraftItem(`${item.label} (${typeLabel})`, draftScQty, price, "");
   };
   const addDraftExpressLine = () => {
-    const item = expressServices.find((i) => String(i.id) === String(draftExItemId));
+    const item = expressServices.find((i) => i.id === draftExItemId);
     if (!item) { notify("Prices are still loading, try again in a moment"); return; }
     addDraftItem(item.label, draftExQty, item.price, "");
   };
@@ -756,12 +756,12 @@ export default function Admin() {
   ];
 
   useEffect(() => {
-    if (shopPickerItems.length && !shopPickerItems.find((p) => String(p.id) === String(draftProductId))) setDraftProductId(shopPickerItems[0].id);
+    if (shopPickerItems.length && !shopPickerItems.find((p) => p.id === draftProductId)) setDraftProductId(shopPickerItems[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, addonProducts]);
 
   const addDraftProductLine = () => {
-    const product = shopPickerItems.find((p) => String(p.id) === String(draftProductId));
+    const product = shopPickerItems.find((p) => p.id === draftProductId);
     if (!product) { notify("Products are still loading, try again in a moment"); return; }
     addDraftItem(product.name, draftProductQty, product.price, "");
   };
