@@ -85,11 +85,27 @@ function usePersistedState(key, initialValue) {
 // backend returns would erase that record the moment the next poll runs,
 // even though nothing was ever actually deleted. This keeps any not-yet-
 // synced local record around until it genuinely appears in a fresh fetch.
+// A background refresh should NEVER be able to make an order/booking vanish
+// within the first couple of minutes after it's placed — that protects
+// against a real, short network hiccup during the backend save. But keeping
+// an unsynced local order alive *forever* backfires: it means anything that
+// permanently failed to save (an old bug, a one-off backend error) becomes a
+// "ghost" that piles up in that one browser's storage indefinitely, making
+// that device's counts drift further and further from the real backend
+// truth over time — exactly what was happening here. Past this grace
+// window, if it still hasn't appeared in a fresh fetch, it's treated as
+// genuinely gone rather than kept alive forever.
+const UNSYNCED_GRACE_MS = 2 * 60 * 1000; // 2 minutes
+
 function mergeKeepingUnsynced(prevList, freshList) {
-  const stillUnsynced = prevList.filter((item) => !item.dbId);
+  const cutoff = Date.now() - UNSYNCED_GRACE_MS;
+  const stillUnsynced = prevList.filter((item) => {
+    if (item.dbId) return false;
+    const placedAtMs = item.placedAt ? new Date(item.placedAt).getTime() : 0;
+    return placedAtMs > cutoff;
+  });
   return [...stillUnsynced, ...freshList];
 }
-
 const SEED_LAUNDRY_ORDERS = [
   {
     id: "LND-4821",
