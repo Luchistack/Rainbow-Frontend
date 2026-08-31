@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   CheckCircle2, Minus, Plus, Truck, CreditCard, Phone, Mail, User,
   Shirt, Users, Sparkles, Package, ShoppingBag, Trash2, Landmark, Copy, Zap, Store,
@@ -88,30 +88,6 @@ export default function OrderLaundry() {
   const [email, setEmail] = useState("");
   const [placed, setPlaced] = useState(null);
 
-  // Pricing loads from the backend a moment after the page first renders —
-  // before that, dropdowns show temporary fallback data with different IDs.
-  // Without this, a selection made (or defaulted) before the real data
-  // arrives would silently point at nothing once it does, and "Add" would
-  // fail with no visible error. This keeps every picker's selected id valid
-  // any time its underlying price list changes, self-healing automatically
-  // rather than getting stuck.
-  useEffect(() => {
-    const source = category === "selfwash" ? selfWashRates : staffWashRates;
-    if (source.length && !source.find((r) => r.id === washRateId)) setWashRateId(source[0].id);
-  }, [category, selfWashRates, staffWashRates]);
-
-  useEffect(() => {
-    if (dryCleanItems.length && !dryCleanItems.find((i) => i.id === dcItemId)) setDcItemId(dryCleanItems[0].id);
-  }, [dryCleanItems]);
-
-  useEffect(() => {
-    if (shoeCareItems.length && !shoeCareItems.find((i) => i.id === scItemId)) setScItemId(shoeCareItems[0].id);
-  }, [shoeCareItems]);
-
-  useEffect(() => {
-    if (expressServices.length && !expressServices.find((i) => i.id === exItemId)) setExItemId(expressServices[0].id);
-  }, [expressServices]);
-
   const addItem = (name, qty, price, unit) => {
     setItems((its) => {
       const existing = its.find((i) => i.name === name && i.unit === unit);
@@ -126,7 +102,6 @@ export default function OrderLaundry() {
 
   const addWashLine = (isSelf) => {
     const rate = (isSelf ? selfWashRates : staffWashRates).find((r) => r.id === washRateId);
-    if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
     let unitPrice = rate.price;
     let discounted = false;
     if (isSelf && washWeight >= SELF_WASH_DISCOUNT_KG) {
@@ -139,24 +114,18 @@ export default function OrderLaundry() {
 
   const addDryCleanLine = () => {
     const item = dryCleanItems.find((i) => i.id === dcItemId);
-    if (!item) { notify("Prices are still loading, try again in a moment"); return; }
     const price = dcType === "deep" ? item.deep : item.regular;
     const name = `${item.label} (${dcType === "deep" ? "Deep Clean" : "Regular"})`;
     addItem(name, dcQty, price, "");
   };
 
   const addExpressLine = () => {
-    // Price is deliberately 0 here — Express is never shown or charged a price
-    // on the public site, it's confirmed with the customer via WhatsApp before
-    // anything is charged, same as Home/Office/Deep Clean/Upholstery bookings.
     const item = expressServices.find((i) => i.id === exItemId);
-    if (!item) { notify("Prices are still loading, try again in a moment"); return; }
-    addItem(`${item.label} (Price via WhatsApp)`, exQty, 0, "");
+    addItem(item.label, exQty, item.price, "");
   };
 
   const addShoeCareLine = () => {
     const item = shoeCareItems.find((i) => i.id === scItemId);
-    if (!item) { notify("Prices are still loading, try again in a moment"); return; }
     const price = scType === "deep" ? item.deep : scType === "repair" ? item.repair : item.regular;
     const typeLabel = scType === "deep" ? "Deep Clean" : scType === "repair" ? "Minor Repairs" : "Regular";
     const name = `${item.label} (${typeLabel})`;
@@ -333,7 +302,7 @@ export default function OrderLaundry() {
                     <label>Express service</label>
                     <select value={exItemId} onChange={(e) => setExItemId(e.target.value)}>
                       {expressServices.map((i) => (
-                        <option key={i.id} value={i.id}>{i.label}</option>
+                        <option key={i.id} value={i.id}>{i.label}, {money(i.price)}</option>
                       ))}
                     </select>
                   </div>
@@ -345,8 +314,8 @@ export default function OrderLaundry() {
                       <button onClick={() => setExQty((q) => q + 1)}><Plus size={15} /></button>
                     </div>
                   </div>
-                  <p style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 600, marginBottom: 14 }}>
-                    No price shown here, our team confirms your Express surcharge via WhatsApp before anything is charged.
+                  <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginBottom: 14 }}>
+                    Add an Express line alongside your laundry, upholstery or cleaning items for same-day turnaround.
                   </p>
                   <button className="rw-btn rw-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={addExpressLine}>
                     <Plus size={15} /> Add to order

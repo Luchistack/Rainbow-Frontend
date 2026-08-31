@@ -189,26 +189,6 @@ export default function Admin() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, canSeeOverview]);
-  useEffect(() => {
-    const source = draftCategory === "selfwash" ? selfWashRates : staffWashRates;
-    if (source.length && !source.find((r) => r.id === draftWashRateId)) setDraftWashRateId(source[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftCategory, selfWashRates, staffWashRates]);
-
-  useEffect(() => {
-    if (dryCleanItems.length && !dryCleanItems.find((i) => i.id === draftDcItemId)) setDraftDcItemId(dryCleanItems[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dryCleanItems]);
-
-  useEffect(() => {
-    if (shoeCareItems.length && !shoeCareItems.find((i) => i.id === draftScItemId)) setDraftScItemId(shoeCareItems[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shoeCareItems]);
-
-  useEffect(() => {
-    if (expressServices.length && !expressServices.find((i) => i.id === draftExItemId)) setDraftExItemId(expressServices[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expressServices]);
 
   if (!currentUser) {
     return (
@@ -717,26 +697,25 @@ export default function Admin() {
   const addDraftWashLine = () => {
     const isSelf = draftCategory === "selfwash";
     const rate = (isSelf ? selfWashRates : staffWashRates).find((r) => r.id === draftWashRateId);
-        if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
+    if (!rate) return;
     addDraftItem(`${isSelf ? "Self Wash" : "Staff Wash"}, ${rate.label}`, draftWashWeight, rate.price, "kg");
   };
   const addDraftDryCleanLine = () => {
     const item = dryCleanItems.find((i) => i.id === draftDcItemId);
-        if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
+    if (!item) return;
     const price = draftDcType === "deep" ? item.deep : item.regular;
     addDraftItem(`${item.label} (${draftDcType === "deep" ? "Deep Clean" : "Regular"})`, draftDcQty, price, "");
   };
   const addDraftShoeCareLine = () => {
     const item = shoeCareItems.find((i) => i.id === draftScItemId);
-        if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
+    if (!item) return;
     const price = draftScType === "deep" ? item.deep : draftScType === "repair" ? item.repair : item.regular;
     const typeLabel = draftScType === "deep" ? "Deep Clean" : draftScType === "repair" ? "Minor Repairs" : "Regular";
     addDraftItem(`${item.label} (${typeLabel})`, draftScQty, price, "");
   };
   const addDraftExpressLine = () => {
     const item = expressServices.find((i) => i.id === draftExItemId);
-        if (!item) { notify("Prices are still loading, try again in a moment"); return; }
-      
+    if (!item) return;
     addDraftItem(item.label, draftExQty, item.price, "");
   };
   // Combines the real Shop inventory with the Pricing tab's add-on catalog —
@@ -748,14 +727,9 @@ export default function Admin() {
     ...addonProducts.map((a) => ({ id: a.id, name: a.label, price: a.price })),
   ];
 
-    useEffect(() => {
-    if (shopPickerItems.length && !shopPickerItems.find((p) => p.id === draftProductId)) setDraftProductId(shopPickerItems[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, addonProducts]);
-
   const addDraftProductLine = () => {
     const product = shopPickerItems.find((p) => p.id === draftProductId);
-        if (!product) { notify("Products are still loading, try again in a moment"); return; }
+    if (!product) return;
     addDraftItem(product.name, draftProductQty, product.price, "");
   };
 
