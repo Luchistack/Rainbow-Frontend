@@ -213,10 +213,26 @@ export default function Admin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shoeCareItems]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (expressServices.length && !expressServices.find((i) => String(i.id) === String(draftExItemId))) setDraftExItemId(expressServices[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expressServices]);
+
+  // This one was previously placed after the `if (!currentUser)` early return
+  // below — a genuine Rules-of-Hooks violation, since React then saw a
+  // different number of hooks depending on whether someone was logged in,
+  // crashing with "Rendered fewer hooks than expected" on every login/logout
+  // transition. Computed inline here (rather than depending on the
+  // shopPickerItems variable defined further down) so it can safely live
+  // above the early return alongside its four sibling effects.
+  useEffect(() => {
+    const pickerItems = [
+      ...products.filter((p) => (p.status || "Active") === "Active").map((p) => ({ id: p.id })),
+      ...addonProducts.map((a) => ({ id: a.id })),
+    ];
+    if (pickerItems.length && !pickerItems.find((p) => String(p.id) === String(draftProductId))) setDraftProductId(pickerItems[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, addonProducts]);
 
   if (!currentUser) {
     return (
@@ -754,11 +770,6 @@ export default function Admin() {
     ...products.filter((p) => (p.status || "Active") === "Active").map((p) => ({ id: p.id, name: p.name, price: p.price })),
     ...addonProducts.map((a) => ({ id: a.id, name: a.label, price: a.price })),
   ];
-
-  useEffect(() => {
-    if (shopPickerItems.length && !shopPickerItems.find((p) => String(p.id) === String(draftProductId))) setDraftProductId(shopPickerItems[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, addonProducts]);
 
   const addDraftProductLine = () => {
     const product = shopPickerItems.find((p) => String(p.id) === String(draftProductId));
