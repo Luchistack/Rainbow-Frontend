@@ -299,18 +299,24 @@ export function AppProvider({ children }) {
     setTimeout(() => setToast(""), 3200);
   };
 
-  // On-demand sync — lets a staff member pull the latest orders/bookings/shop
-  // orders right now instead of waiting for the 20-second background refresh.
-  const refreshAll = async () => {
-    const results = await Promise.allSettled([fetchOrders(), fetchBookings(), fetchShopOrders()]);
-    if (results[0].status === "fulfilled" && results[0].value) setLaundryOrders((prev) => mergeKeepingUnsynced(prev, results[0].value));
-    if (results[1].status === "fulfilled" && results[1].value) setBookings((prev) => mergeKeepingUnsynced(prev, results[1].value));
-    if (results[2].status === "fulfilled" && results[2].value) setShopOrders((prev) => mergeKeepingUnsynced(prev, results[2].value));
-    // "Success" here just means at least one of the three came through — a
-    // single slow/failed endpoint shouldn't make the whole refresh look like
-    // a dead server when the other two genuinely did update.
-    return results.some((r) => r.status === "fulfilled");
-  };
+   // Browsers throttle or fully pause background-tab timers to save battery,
+  // so the 20-second poll above can silently stretch out much longer while a
+  // dashboard tab isn't the active one (switched away on desktop, phone
+  // screen locked/backgrounded, etc). Rather than waiting for a possibly
+  // delayed timer to catch up, this fires an immediate refresh the moment
+  // the tab becomes visible again — so coming back to the dashboard always
+  // shows what's actually true right now, not what it last happened to fetch.
+  useEffect(() => {
+    if (!currentUser) return;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshAll();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
 
   const cartCount = useMemo(() => cart.reduce((s, i) => s + i.qty, 0), [cart]);
 
