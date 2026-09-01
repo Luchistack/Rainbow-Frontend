@@ -78,13 +78,6 @@ function usePersistedState(key, initialValue) {
   return [state, setState];
 }
 
-// A background refresh should NEVER be able to make an order/booking vanish.
-// If something was placed while the backend save silently failed (a network
-// blip, a validation hiccup, anything), it only exists in local state — it
-// has no real `dbId` yet. Blindly replacing the whole list with whatever the
-// backend returns would erase that record the moment the next poll runs,
-// even though nothing was ever actually deleted. This keeps any not-yet-
-// synced local record around until it genuinely appears in a fresh fetch.
 // A background refresh should NEVER be able to make an order/booking vanish
 // within the first couple of minutes after it's placed — that protects
 // against a real, short network hiccup during the backend save. But keeping
@@ -106,6 +99,7 @@ function mergeKeepingUnsynced(prevList, freshList) {
   });
   return [...stillUnsynced, ...freshList];
 }
+
 const SEED_LAUNDRY_ORDERS = [
   {
     id: "LND-4821",
@@ -299,7 +293,7 @@ export function AppProvider({ children }) {
     setTimeout(() => setToast(""), 3200);
   };
 
-     // On-demand sync — lets a staff member pull the latest orders/bookings/shop
+  // On-demand sync — lets a staff member pull the latest orders/bookings/shop
   // orders right now instead of waiting for the 20-second background refresh.
   const refreshAll = async () => {
     const results = await Promise.allSettled([fetchOrders(), fetchBookings(), fetchShopOrders()]);
