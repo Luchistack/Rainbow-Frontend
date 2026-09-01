@@ -407,9 +407,24 @@ export default function Admin() {
 
   // Manual clearing only — Manager/Admin decide when to archive everything
   // currently open (typically at the start of a new day), Staff cannot.
-  const clearTodaysOrders = () => setLaundryOrders((os) => os.map((o) => (!o.archived ? { ...o, archived: true } : o)));
-  const clearTodaysBookings = () => setBookings((bs) => bs.map((b) => (!b.archived ? { ...b, archived: true } : b)));
-  const clearTodaysShopOrders = () => setShopOrders((os) => os.map((o) => (!o.archived ? { ...o, archived: true } : o)));
+  // These bulk-clear actions previously only updated local state, never
+  // telling the backend anything had changed — so the very next 20-second
+  // background sync would fetch the still-unarchived backend data and
+  // silently un-clear everything, making it look like the clear "went and
+  // came back." Each item now gets the same real PATCH the individual
+  // per-row archive button already sends, so the change actually sticks.
+  const clearTodaysOrders = () => {
+    laundryOrders.forEach((o) => { if (!o.archived) persistOrder(o.id, { archived: true }); });
+    setLaundryOrders((os) => os.map((o) => (!o.archived ? { ...o, archived: true } : o)));
+  };
+  const clearTodaysBookings = () => {
+    bookings.forEach((b) => { if (!b.archived) persistBookingUpdate(b.id, { archived: true }); });
+    setBookings((bs) => bs.map((b) => (!b.archived ? { ...b, archived: true } : b)));
+  };
+  const clearTodaysShopOrders = () => {
+    shopOrders.forEach((o) => { if (!o.archived) persistShopOrder(o.id, { archived: true }); });
+    setShopOrders((os) => os.map((o) => (!o.archived ? { ...o, archived: true } : o)));
+  };
   const startNewDay = () => {
     clearTodaysOrders();
     clearTodaysBookings();
