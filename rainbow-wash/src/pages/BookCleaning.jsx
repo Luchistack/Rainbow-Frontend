@@ -76,8 +76,8 @@ function buildReceipt(booking) {
     `Size: ${booking.size}`,
     `Date: ${booking.date || "—"} ${booking.time || ""}`.trim(),
     `Address: ${booking.address || "—"}`,
-    `Requested payment split: ${booking.payType === "deposit" ? "30% deposit now, 70% on completion" : "Full payment"}`,
-  ];
+    `Requested payment split: ${booking.payType === "deposit" ? "70% deposit now, balance on completion" : "Full payment"}`,
+    ];
   if (booking.transferNote) lines.push(`Transfer note: ${booking.transferNote}`);
   if (booking.express) lines.push(`Express (same-day) requested: Yes`);
   lines.push(`Customer name: ${booking.fullName}`);
@@ -279,8 +279,7 @@ export default function BookCleaning() {
           <div className="rw-card rw-summary" style={{ position: "sticky", top: 90 }}>
             <h3 style={{ marginBottom: 14 }}>Booking summary</h3>
             <div className="rw-summary-row"><span>Service</span><span>{svc?.label}</span></div>
-            <div className="rw-summary-row"><span>Size</span><span>{sizeObj?.label}</span></div>
-            <div className="rw-summary-row"><span>Payment split</span><span>{payType === "deposit" ? "30% / 70%" : "Full"}</span></div>
+            <div className="rw-summary-row"><span>Payment split</span><span>{payType === "deposit" ? "70% deposit" : "Full payment"}</span></div> <div className="rw-summary-row"><span>Payment split</span><span>{payType === "deposit" ? "30% / 70%" : "Full"}</span></div>
             {express && <div className="rw-summary-row"><span>Turnaround</span><span style={{ fontWeight: 700, color: "var(--blue)" }}>Express (same-day)</span></div>}
             <div style={{ background: "var(--ice)", borderRadius: 12, padding: 14, marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
               <MessageCircle size={18} color="var(--blue)" style={{ flexShrink: 0, marginTop: 2 }} />

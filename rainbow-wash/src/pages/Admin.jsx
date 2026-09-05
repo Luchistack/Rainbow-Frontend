@@ -76,8 +76,15 @@ export default function Admin() {
   const [deletingEmpId, setDeletingEmpId] = useState(null);
 
   // Confirmation gate before permanently deleting a History record (Admin only).
-  const [confirmDeleteHistoryRow, setConfirmDeleteHistoryRow] = useState(null);
+   const [confirmDeleteHistoryRow, setConfirmDeleteHistoryRow] = useState(null);
   const [deletingHistoryKey, setDeletingHistoryKey] = useState(null);
+
+  // Confirmation gates for Reports' delete actions (Admin only, same
+  // permanent-delete rules as History).
+  const [confirmDeleteClient, setConfirmDeleteClient] = useState(null);
+  const [deletingClientKey, setDeletingClientKey] = useState(null);
+  const [confirmClearAllReports, setConfirmClearAllReports] = useState(false);
+  const [clearingAllReports, setClearingAllReports] = useState(false);
 
   // --- Walk-in / offline order drafting ---
   // Each of the three order types gets its own "open a draft" toggle. While a
@@ -907,9 +914,9 @@ export default function Admin() {
     .sort((a, b) => new Date(b.placedAt || 0) - new Date(a.placedAt || 0));
 
   const allRecords = [
-    ...laundryOrders.map((o) => ({ total: o.total, placedAt: o.placedAt, paymentStatus: o.paymentStatus, name: o.fullName, phone: o.phone })),
-    ...bookings.map((b) => ({ total: b.payable, placedAt: b.placedAt, paymentStatus: b.paymentStatus, name: b.fullName, phone: b.phone })),
-    ...shopOrders.map((o) => ({ total: o.total, placedAt: o.placedAt, paymentStatus: o.paymentStatus, name: o.fullName, phone: o.phone })),
+    ...laundryOrders.map((o) => ({ type: "Laundry", ref: o.id, dbId: o.dbId, total: o.total, placedAt: o.placedAt, paymentStatus: o.paymentStatus, name: o.fullName, phone: o.phone })),
+    ...bookings.map((b) => ({ type: "Cleaning", ref: b.id, dbId: b.dbId, total: b.payable, placedAt: b.placedAt, paymentStatus: b.paymentStatus, name: b.fullName, phone: b.phone })),
+    ...shopOrders.map((o) => ({ type: "Shop", ref: o.id, dbId: o.dbId, total: o.total, placedAt: o.placedAt, paymentStatus: o.paymentStatus, name: o.fullName, phone: o.phone })),
   ].filter((r) => matchesRange(r.placedAt, reportsRange));
 
   const totalInvoiced = allRecords.reduce((s, r) => s + (r.total || 0), 0);
@@ -919,12 +926,45 @@ export default function Admin() {
   const clientMap = {};
   allRecords.forEach((r) => {
     const key = r.phone || r.name || "Unknown";
-    if (!clientMap[key]) clientMap[key] = { name: r.name || "Unknown", phone: r.phone || "—", total: 0, count: 0 };
+    if (!clientMap[key]) clientMap[key] = { name: r.name || "Unknown", phone: r.phone || "—", total: 0, count: 0, records: [] };
     clientMap[key].total += r.total || 0;
     clientMap[key].count += 1;
+    clientMap[key].records.push(r);
   });
   const topClients = Object.values(clientMap).sort((a, b) => b.total - a.total).slice(0, 6);
 
+  // Permanently deletes every record behind either a single client's spend
+  // row, or (with allRecords passed in) everything currently shown in this
+  // report — same real backend delete used by History, just applied to
+  // however many records are involved here. Admin only, gated at the tab
+  // level like the rest of Reports.
+  const deleteRecordSet = async (records) => {
+    for (const r of records) {
+      try {
+        if (r.type === "Laundry" && r.dbId) { await deleteOrder(r.dbId); setLaundryOrders((os) => os.filter((o) => o.id !== r.ref)); }
+        else if (r.type === "Cleaning" && r.dbId) { await deleteBooking(r.dbId); setBookings((bs) => bs.filter((b) => b.id !== r.ref)); }
+        else if (r.type === "Shop" && r.dbId) { await deleteShopOrder(r.dbId); setShopOrders((os) => os.filter((o) => o.id !== r.ref)); }
+      } catch (err) {
+        notify(err.message || `Failed to delete ${r.ref}`);
+      }
+    }
+  };
+
+  const handleDeleteClient = async (client) => {
+    setDeletingClientKey(client.phone);
+    await deleteRecordSet(client.records);
+    notify(`Deleted all records for ${client.name}.`);
+    setConfirmDeleteClient(null);
+    setDeletingClientKey(null);
+  };
+
+  const handleClearAllReports = async () => {
+    setClearingAllReports(true);
+    await deleteRecordSet(allRecords);
+    notify("All records in this report have been permanently deleted.");
+    setConfirmClearAllReports(false);
+    setClearingAllReports(false);
+  };
   const NAV = [
     canSeeOverview && { id: "overview", label: "Overview", icon: LayoutDashboard },
     { id: "orders", label: "Laundry Orders", icon: Truck },
@@ -1715,17 +1755,24 @@ export default function Admin() {
           </div>
         )}
 
-        {tab === "reports" && canSeeReports && (
+             {tab === "reports" && canSeeReports && (
           <div>
             <div className="rw-admin-panel-head">
               <div>
                 <h2 style={{ marginBottom: 4 }}>Reports & Financial Summary</h2>
                 <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>Detailed breakdown of all revenue streams and metrics.</p>
               </div>
-              <div className="rw-pill-group">
-                {RANGES.filter((r) => r.id !== "custom").map((r) => (
-                  <button key={r.id} className={`rw-pill ${reportsRange === r.id ? "active" : ""}`} onClick={() => setReportsRange(r.id)}>{r.label}</button>
-                ))}
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div className="rw-pill-group">
+                  {RANGES.filter((r) => r.id !== "custom").map((r) => (
+                    <button key={r.id} className={`rw-pill ${reportsRange === r.id ? "active" : ""}`} onClick={() => setReportsRange(r.id)}>{r.label}</button>
+                  ))}
+                </div>
+                {allRecords.length > 0 && (
+                  <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmClearAllReports(true)}>
+                    <Trash2 size={13} color="#e0473f" /> Clear all
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1737,7 +1784,7 @@ export default function Admin() {
 
             <h3 style={{ fontSize: 16, marginBottom: 12 }}>Top Clients by Spend</h3>
             <table className="rw-table" style={{ marginBottom: 28 }}>
-              <thead><tr><th>Client Name</th><th>Phone</th><th>Total Spend</th><th>Orders Count</th></tr></thead>
+              <thead><tr><th>Client Name</th><th>Phone</th><th>Total Spend</th><th>Orders Count</th><th></th></tr></thead>
               <tbody>
                 {topClients.map((c, idx) => (
                   <tr key={idx}>
@@ -1745,13 +1792,64 @@ export default function Admin() {
                     <td>{c.phone}</td>
                     <td>{money(c.total)}</td>
                     <td>{c.count}</td>
+                    <td>
+                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteClient(c)} title="Permanently delete every record for this client">
+                        <Trash2 size={13} color="#e0473f" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {topClients.length === 0 && (
-                  <tr><td colSpan={4} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No client records for this range.</td></tr>
+                  <tr><td colSpan={5} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No client records for this range.</td></tr>
                 )}
               </tbody>
             </table>
+
+            {confirmDeleteClient && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(7,26,47,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+                <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 420, width: "90%" }}>
+                  <h3 style={{ fontSize: 16, marginBottom: 10 }}>Permanently delete this client's records?</h3>
+                  <p style={{ fontSize: 13.5, color: "var(--ink-soft)", marginBottom: 20 }}>
+                    All {confirmDeleteClient.count} record{confirmDeleteClient.count === 1 ? "" : "s"} for <b>{confirmDeleteClient.name}</b> ({confirmDeleteClient.phone})
+                    within this date range will be gone for good, everywhere, including History. This cannot be undone.
+                  </p>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                    <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteClient(null)}>Cancel</button>
+                    <button
+                      className="rw-btn rw-btn-primary rw-btn-sm"
+                      style={{ background: "var(--bad)" }}
+                      onClick={() => handleDeleteClient(confirmDeleteClient)}
+                      disabled={deletingClientKey === confirmDeleteClient.phone}
+                    >
+                      {deletingClientKey === confirmDeleteClient.phone ? "Deleting..." : "Yes, delete permanently"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {confirmClearAllReports && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(7,26,47,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+                <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 420, width: "90%" }}>
+                  <h3 style={{ fontSize: 16, marginBottom: 10 }}>Permanently delete every record in this report?</h3>
+                  <p style={{ fontSize: 13.5, color: "var(--ink-soft)", marginBottom: 20 }}>
+                    All {allRecords.length} laundry order{allRecords.length === 1 ? "" : "s"}, booking{allRecords.length === 1 ? "" : "s"} and shop order{allRecords.length === 1 ? "" : "s"} shown
+                    for this date range will be gone for good, everywhere, including History. This cannot be undone.
+                  </p>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                    <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmClearAllReports(false)}>Cancel</button>
+                    <button
+                      className="rw-btn rw-btn-primary rw-btn-sm"
+                      style={{ background: "var(--bad)" }}
+                      onClick={handleClearAllReports}
+                      disabled={clearingAllReports}
+                    >
+                      {clearingAllReports ? "Deleting..." : "Yes, delete everything permanently"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
