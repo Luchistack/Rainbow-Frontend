@@ -124,7 +124,7 @@ export default function Services() {
               {s.sizes.map((sz) => (
                 <div key={sz.id} className="rw-summary-row">
                   <span>{sz.label}</span>
-                  <span style={{ fontWeight: 700, color: "var(--blue)", fontSize: 13 }}>Price via WhatsApp</span>
+                  <span style={{ fontWeight: 700, color: "var(--blue)", fontSize: 13 }}>Check price</span>
                 </div>
               ))}
             </div>
@@ -141,7 +141,7 @@ export default function Services() {
         <div className="rw-section-head">
           <div className="rw-kicker">Subscription plans</div>
           <h2>Laundry on a schedule</h2>
-          <p>Subscribe once, we handle the rest, no need to place a fresh order every time. Sign up via WhatsApp.</p>
+          <p>Subscribe once, we handle the rest, no need to place a fresh order every time.</p>
         </div>
         <div className="rw-grid-3">
           {SUBSCRIPTION_PLANS.map((plan) => (
@@ -152,7 +152,7 @@ export default function Services() {
               <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 10 }}>{plan.duration}</div>
               <p style={{ fontSize: 14, color: "var(--ink)", marginBottom: 16 }}>{plan.covers}</p>
               <a href={subscribeLink(plan)} target="_blank" rel="noopener noreferrer" className="rw-btn rw-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
-                <MessageCircle size={15} /> Subscribe via WhatsApp
+                <MessageCircle size={15} /> Subscribe
               </a>
             </div>
           ))}
