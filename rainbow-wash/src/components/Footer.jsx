@@ -1,4 +1,4 @@
-import { MapPin, Phone, Mail, Instagram, Sparkles, ExternalLink } from "lucide-react";
+import { MapPin, Phone, Mail, Instagram, Sparkles, ExternalLink, MessageCircle } from "lucide-react";
 import logo from "../assets/logo.png";
 import { BUSINESS_INFO, MAPS_LINK } from "../data/constants";
 
@@ -30,9 +30,8 @@ export default function Footer() {
           <h4>Contact</h4>
           <ul>
             <li><MapPin size={15} /> {BUSINESS_INFO.address}</li>
-            {BUSINESS_INFO.phones.map((p) => (
-              <li key={p}><Phone size={15} /> {p}</li>
-            ))}
+            <li><Phone size={15} /> <a href={`tel:${BUSINESS_INFO.phones[0].replace(/\s/g, "")}`}>{BUSINESS_INFO.phones[0]}</a></li>
+            <li><MessageCircle size={15} /> <a href="https://wa.me/2349165896730" target="_blank" rel="noopener noreferrer">WhatsApp: {BUSINESS_INFO.phones[1]}</a></li>
           </ul>
           <a
             href={MAPS_LINK}

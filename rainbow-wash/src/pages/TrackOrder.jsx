@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Search, CheckCircle2, Circle, Bell, MessageCircle, Phone } from "lucide-react";
+import { Search, CheckCircle2, Circle, MessageCircle, Phone } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import Steps from "../components/Steps";
 import FAQ from "../components/FAQ";
@@ -18,7 +18,7 @@ const TRACK_STEPS = [
 
 const TRACK_FAQ = [
   { q: "How often does the status update?", a: "As soon as staff move your order to the next stage in our system, usually within the timeframes shown on the Order Laundry page." },
-  { q: "Will I be notified automatically?", a: "You'll get an SMS or email whenever your status changes. For now, check this page with your reference." },
+  { q: "Will I be notified automatically?", a: "Automatic SMS and email notifications are not available yet. For now, check this page with your reference or contact us." },
   { q: "I lost my reference number, what do I do?", a: "Contact us on WhatsApp or phone with your name and approximate drop-off time and we'll look it up." },
 ];
 
@@ -110,16 +110,6 @@ export default function TrackOrder() {
       <Steps kicker="What each stage means" title="Understanding your order status" steps={TRACK_STEPS} />
 
       <div className="rw-section" style={{ paddingTop: 0 }}>
-        <div className="rw-cta-band">
-          <div>
-            <h3><Bell size={20} style={{ verticalAlign: -3, marginRight: 6 }} />Notifications are coming soon</h3>
-            <p>Once connected to our backend, you'll get an SMS or email the moment your status changes, no need to keep checking.</p>
-          </div>
-          <Link to="/order-laundry" className="rw-btn rw-btn-rainbow">Place an order</Link>
-        </div>
-      </div>
-
-      <div className="rw-section" style={{ paddingTop: 0 }}>
         <div className="rw-grid-2">
           <div className="rw-card" style={{ textAlign: "center" }}>
             <MessageCircle size={26} color="var(--blue)" style={{ marginBottom: 10 }} />
@@ -129,7 +119,8 @@ export default function TrackOrder() {
           <div className="rw-card" style={{ textAlign: "center" }}>
             <Phone size={26} color="var(--blue)" style={{ marginBottom: 10 }} />
             <h3 style={{ fontSize: 17, marginBottom: 6 }}>Call the shop</h3>
-            <p style={{ color: "var(--ink-soft)", fontSize: 15 }}>0812 140 6293 or 0916 589 6730, during opening hours.</p>
+            <p style={{ color: "var(--ink-soft)", fontSize: 15 }}>0812 140 6293, during opening hours.</p>
+            <p style={{ marginTop: 8 }}><a href="https://wa.me/2349165896730" target="_blank" rel="noopener noreferrer">WhatsApp: 0916 589 6730</a></p>
           </div>
         </div>
       </div>

@@ -25,9 +25,11 @@ const CATEGORIES = [
 
 const TURNAROUND = [
   { level: "Self Wash", time: "Same visit" },
-  { level: "Staff Wash", time: "24–48 hours" },
+  { level: "Staff Wash", time: "48–72 hours" },
   { level: "Dry Cleaning", time: "48 hours" },
   { level: "Shoe & Leather Care", time: "48–72 hours" },
+  { level: "Express Wash", time: "Same day (orders by 5 PM)" },
+  { level: "Next-Day Express", time: "48 hours" },
 ];
 
 const CARE_TIPS = [
@@ -80,7 +82,7 @@ export default function OrderLaundry() {
   const [address, setAddress] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
-  const [payment, setPayment] = useState("paystack");
+  const [payment, setPayment] = useState("bank");
   const [transferNote, setTransferNote] = useState("");
   const [transferSent, setTransferSent] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -468,6 +470,7 @@ export default function OrderLaundry() {
                   {/* <button className={`rw-pill ${payment === "paystack" ? "active" : ""}`} onClick={() => setPayment("paystack")}>Paystack</button>
                   <button className={`rw-pill ${payment === "flutterwave" ? "active" : ""}`} onClick={() => setPayment("flutterwave")}>Flutterwave</button> */}
                   <button className={`rw-pill ${payment === "bank" ? "active" : ""}`} onClick={() => setPayment("bank")}>Bank Transfer</button>
+                  <span className="rw-pill" aria-label="POS payment available for walk-in customers">POS (walk-in only)</span>
                 </div>
               </div>
 
@@ -578,7 +581,7 @@ export default function OrderLaundry() {
           { q: "What's the difference between Self Wash and Staff Wash?", a: "Self Wash means you use our machines yourself at a lower rate. Staff Wash means our team washes, dries and/or irons it for you, priced a little higher to cover the labour." },
           { q: "Do I get a discount on Self Wash?", a: `Yes, any Self Wash line of ${SELF_WASH_DISCOUNT_KG}kg or more automatically gets ${SELF_WASH_DISCOUNT_RATE * 100}% off.` },
           { q: "How fast is delivery?", a: "Same day or next day delivery, depending on when your items are dropped off and the service selected." },
-          { q: "What payment methods are accepted?", a: "Paystack, Flutterwave, or direct bank transfer, choose at checkout." },
+          { q: "What payment methods are accepted?", a: "Bank transfer is available for orders. POS payment is available for walk-in customers." },
           { q: "Is there a delivery fee?", a: `A flat ${money(DELIVERY_FEE)} fee applies for pickup and delivery combined. ${DELIVERY_COVERAGE_NOTE} Drop off, in store has no extra fee.` },
           { q: "Why do you ask for my phone number?", a: "So our team can call you the moment your order is ready or if anything needs confirming." },
         ]}

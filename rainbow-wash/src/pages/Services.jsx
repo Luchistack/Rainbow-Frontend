@@ -22,7 +22,7 @@ const PROCESS = [
   { title: "Choose a service", desc: "Laundry by weight or item, or a cleaning appointment for home, office or upholstery." },
   { title: "Set your schedule", desc: "Drop off in store, or pick a pickup window that fits your day." },
   { title: "We do the work", desc: "Weighed, washed, pressed or deep cleaned by trained staff, start to finish." },
-  { title: "Pay and track", desc: "Pay online via Paystack, Flutterwave or bank transfer, then track live status." },
+  { title: "Pay and track", desc: "Pay by bank transfer for orders, or by POS for walk-in customers, then track your order status." },
 ];
 
 const SERVICES_TESTIMONIALS = [
