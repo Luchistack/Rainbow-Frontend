@@ -24,11 +24,11 @@ const CATEGORIES = [
 ];
 
 const TURNAROUND = [
-  { level: "Self Wash", time: "Same visit" },
+  { level: "Self Wash", time: "Same day visit" },
   { level: "Staff Wash", time: "48–72 hours" },
   { level: "Dry Cleaning", time: "48 hours" },
   { level: "Shoe & Leather Care", time: "48–72 hours" },
-  { level: "Express Wash", time: "Same day (orders by 5 PM)" },
+  { level: "Express Wash", time: "Same day" },
   { level: "Next-Day Express", time: "48 hours" },
 ];
 
