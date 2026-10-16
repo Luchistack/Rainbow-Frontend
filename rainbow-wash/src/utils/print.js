@@ -25,7 +25,7 @@ function computeTotals(order) {
     // faithfully repeating a wrong number instead of getting it right.
     const itemsSubtotal = order.items.reduce((s, i) => s + i.qty * i.price, 0);
     const vat = itemsSubtotal * VAT_RATE;
-    const other = order.fulfilment === "pickup" ? DELIVERY_FEE : 0;
+    const other = order.fulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(order.deliveryFee) || DELIVERY_FEE) : 0;
     const total = itemsSubtotal + vat + other;
     return { subtotal: itemsSubtotal, vat, other, total };
   }
@@ -55,7 +55,12 @@ function buildShareText(order) {
     `VAT (${VAT_RATE * 100}%): ${money(vat)}`,
   ];
   if (other > 1) lines.push(`Delivery / Other: ${money(other)}`);
-  lines.push(`Total: ${money(total)}`, `Status: ${order.status || "—"}`);
+  lines.push(
+    `Total: ${money(total)}`,
+    `Order Status: ${order.status || "—"}`,
+    `Payment Method: ${order.paymentMethod || "—"}`,
+    `Payment Status: ${order.paymentStatus || "Pending"}`
+  );
   return lines.join("\n");
 }
 
@@ -127,6 +132,8 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     ref: order.id,
     date: placedDate,
     status: order.status || "—",
+    paymentMethod: order.paymentMethod || "—",
+    paymentStatus: order.paymentStatus || "Pending",
     items: pdfItems,
     subtotal: money(subtotal),
     vatLabel: `VAT (${VAT_RATE * 100}%)`,
@@ -234,7 +241,9 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     <div style="text-align:right">
       <div><b>Ref:</b> ${order.id}</div>
       <div><b>Date:</b> ${placedDate}</div>
-      <div><b>Status:</b> ${order.status || "—"}</div>
+      <div><b>Order Status:</b> ${order.status || "—"}</div>
+      <div><b>Payment Method:</b> ${order.paymentMethod || "—"}</div>
+      <div><b>Payment Status:</b> ${order.paymentStatus || "Pending"}</div>
     </div>
   </div>
 
@@ -323,9 +332,20 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       doc.setFont(undefined, 'normal');
       doc.text('Date: ' + d.date, right - 140, y + 47);
       doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
-      doc.text('Status: ' + d.status, right - 16, y + 18, { align: 'right' });
+      doc.text('Order Status: ' + d.status, right - 16, y + 18, { align: 'right' });
 
-      y += metaH + 26;
+      y += metaH + 10;
+      doc.setFontSize(9.5);
+      doc.setTextColor(76, 96, 121);
+      doc.setFont(undefined, 'bold');
+      doc.text('PAYMENT METHOD', left + 16, y + 10);
+      doc.text('PAYMENT STATUS', left + 250, y + 10);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(20, 20, 20);
+      doc.text(String(d.paymentMethod), left + 16, y + 24);
+      doc.text(String(d.paymentStatus), left + 250, y + 24);
+
+      y += 34;
 
       // Table header
       var colQty = right - 190, colUnit = right - 115, colAmt = right;

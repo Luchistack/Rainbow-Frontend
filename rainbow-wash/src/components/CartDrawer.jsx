@@ -64,8 +64,8 @@ export default function CartDrawer({ open, onClose }) {
       });
       order = saved || localOrder;
     } catch (err) {
-      // Backend unreachable — order still completes locally, just not synced
-      // to the dashboard until it's retried.
+      notify(err?.message || "We couldn't save your order. Please try again.");
+      return;
     }
 
     setShopOrders((os) => [order, ...os]);

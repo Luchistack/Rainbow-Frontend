@@ -131,6 +131,14 @@ export default function BookCleaning() {
       notify("Please add a phone number so we can reach you");
       return;
     }
+    if (!email.trim() || !/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)*\.com$/i.test(email.trim())) {
+      notify("Please enter a valid email address ending in .com");
+      return;
+    }
+    if (!date || !time || !address.trim()) {
+      notify("Please provide your preferred date, time, and full address");
+      return;
+    }
 
     const localBooking = {
       id: genRef("CLN"),
@@ -211,16 +219,16 @@ export default function BookCleaning() {
             <div className="rw-form-grid">
               <div className="rw-field">
                 <label>Date</label>
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
               </div>
               <div className="rw-field">
                 <label>Time</label>
-                <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                <input type="time" required value={time} onChange={(e) => setTime(e.target.value)} />
               </div>
             </div>
             <div className="rw-field">
               <label>Location / address</label>
-              <input placeholder="Full address for our team" value={address} onChange={(e) => setAddress(e.target.value)} />
+              <input required placeholder="Full address for our team" value={address} onChange={(e) => setAddress(e.target.value)} />
             </div>
             <div className="rw-field">
               <label>Preferred payment split</label>
@@ -271,8 +279,8 @@ export default function BookCleaning() {
               <input type="tel" placeholder="e.g. 0803 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
             </div>
             <div className="rw-field">
-              <label><Mail size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Email (optional, for your receipt)</label>
-              <input type="email" placeholder="e.g. you@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <label><Mail size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Email * (for your receipt)</label>
+              <input type="email" required autoComplete="email" placeholder="e.g. you@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
           </div>
 

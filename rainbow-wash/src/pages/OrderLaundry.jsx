@@ -6,7 +6,7 @@ import {
 import PageHeader from "../components/PageHeader";
 import FAQ from "../components/FAQ";
 import {
-  ADDON_GROUPS, SELF_WASH_DISCOUNT_KG, SELF_WASH_DISCOUNT_RATE,
+  ADDON_GROUPS,
   DELIVERY_FEE, DELIVERY_COVERAGE_NOTE, BANK_DETAILS, buildWhatsAppLink, VAT_RATE,
 } from "../data/constants";
 import { money, genRef } from "../utils/format";
@@ -129,13 +129,8 @@ export default function OrderLaundry() {
   const addWashLine = (isSelf) => {
     const rate = (isSelf ? selfWashRates : staffWashRates).find((r) => String(r.id) === String(washRateId));
     if (!rate) { notify("Prices are still loading, try again in a moment"); return; }
-    let unitPrice = rate.price;
-    let discounted = false;
-    if (isSelf && washWeight >= SELF_WASH_DISCOUNT_KG) {
-      unitPrice = Math.round(rate.price * (1 - SELF_WASH_DISCOUNT_RATE));
-      discounted = true;
-    }
-    const name = `${isSelf ? "Self Wash" : "Staff Wash"}, ${rate.label}${discounted ? ` (${SELF_WASH_DISCOUNT_RATE * 100}% off)` : ""}`;
+    const unitPrice = rate.price;
+    const name = `${isSelf ? "Self Wash" : "Staff Wash"}, ${rate.label}`;
     addItem(name, washWeight, unitPrice, "kg");
   };
 
@@ -188,6 +183,14 @@ export default function OrderLaundry() {
       notify("Please add a phone number so we can call you when it's ready");
       return;
     }
+    if (!email.trim() || !/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)*\.com$/i.test(email.trim())) {
+      notify("Please enter a valid email address ending in .com");
+      return;
+    }
+    if (fulfilment === "pickup" && (!address.trim() || !date || !time)) {
+      notify("For pickup and delivery, please provide your address, date, and time");
+      return;
+    }
 
     const localOrder = {
       id: genRef("LND"),
@@ -211,8 +214,8 @@ export default function OrderLaundry() {
       });
       order = saved || localOrder;
     } catch (err) {
-      // Backend unreachable — still lets the customer complete their order and
-      // get a reference, just not synced to the dashboard until it's retried.
+      notify(err?.message || "We couldn't save your order. Please try again.");
+      return;
     }
 
     setLaundryOrders((os) => [order, ...os]);
@@ -286,11 +289,7 @@ export default function OrderLaundry() {
                       <span style={{ fontWeight: 700, minWidth: 40, textAlign: "center" }}>{washWeight} kg</span>
                       <button onClick={() => setWashWeight((w) => Math.min(40, w + 0.5))}><Plus size={15} /></button>
                     </div>
-                    {category === "selfwash" && washWeight >= SELF_WASH_DISCOUNT_KG && (
-                      <p style={{ fontSize: 12.5, color: "var(--good)", marginTop: 8, fontWeight: 600 }}>
-                        {SELF_WASH_DISCOUNT_RATE * 100}% discount applied for {SELF_WASH_DISCOUNT_KG}kg+
-                      </p>
-                    )}
+
                   </div>
                   <button className="rw-btn rw-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={() => addWashLine(category === "selfwash")}>
                     <Plus size={15} /> Add to order
@@ -511,8 +510,8 @@ export default function OrderLaundry() {
                 <input type="tel" placeholder="e.g. 0803 1111 1111" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
               <div className="rw-field">
-                <label><Mail size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Email (optional)</label>
-                <input type="email" placeholder="e.g. you@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <label><Mail size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Email <span aria-hidden="true">*</span></label>
+                <input type="email" required autoComplete="email" placeholder="e.g. you@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
             </div>
           </div>
@@ -579,7 +578,7 @@ export default function OrderLaundry() {
         title="Order Laundry FAQ"
         items={[
           { q: "What's the difference between Self Wash and Staff Wash?", a: "Self Wash means you use our machines yourself at a lower rate. Staff Wash means our team washes, dries and/or irons it for you, priced a little higher to cover the labour." },
-          { q: "Do I get a discount on Self Wash?", a: `Yes, any Self Wash line of ${SELF_WASH_DISCOUNT_KG}kg or more automatically gets ${SELF_WASH_DISCOUNT_RATE * 100}% off.` },
+          { q: "How is Self Wash priced?", a: "Self Wash is charged at the displayed price per kilogram, multiplied by the weight selected." },
           { q: "How fast is delivery?", a: "Same day or next day delivery, depending on when your items are dropped off and the service selected." },
           { q: "What payment methods are accepted?", a: "Bank transfer is available for orders. POS payment is available for walk-in customers." },
           { q: "Is there a delivery fee?", a: `A flat ${money(DELIVERY_FEE)} fee applies for pickup and delivery combined. ${DELIVERY_COVERAGE_NOTE} Drop off, in store has no extra fee.` },

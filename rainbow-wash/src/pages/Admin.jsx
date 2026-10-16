@@ -97,6 +97,7 @@ export default function Admin() {
   const [draftPhone, setDraftPhone] = useState("");
   const [draftFulfilment, setDraftFulfilment] = useState("dropoff");
   const [draftAddress, setDraftAddress] = useState("");
+  const [draftDeliveryFee, setDraftDeliveryFee] = useState(DELIVERY_FEE);
   const [draftMode, setDraftMode] = useState("pickup"); // shop fulfilment
   // Cleaning-specific draft fields
   const [draftServiceId, setDraftServiceId] = useState("");
@@ -801,7 +802,7 @@ export default function Admin() {
 
   const draftSubtotal = draftItems.reduce((s, i) => s + i.qty * i.price, 0);
   const draftVat = draftSubtotal * VAT_RATE;
-  const draftTotal = draftSubtotal + draftVat + (draftType === "laundry" && draftFulfilment === "pickup" ? DELIVERY_FEE : 0);
+  const draftTotal = draftSubtotal + draftVat + (draftType === "laundry" && draftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0);
   const draftShopTotal = draftSubtotal + draftVat; // shop checkout has no delivery-fee concept, just VAT on top
 
   const placeDraftLaundryOrder = async () => {
@@ -814,6 +815,7 @@ export default function Admin() {
       payment: "walk-in", paymentStatus: "Pending", transferNote: "",
       fullName: draftFullName.trim(), phone: draftPhone.trim(), email: "",
       placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
+      deliveryFee: draftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0,
       total: draftTotal, status: "Received",
     };
     setPlacingDraft(true);
@@ -821,7 +823,7 @@ export default function Admin() {
       const saved = await createOrder({
         items: draftItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, price: i.price })),
         fulfilment: draftFulfilment, address: draftAddress,
-        paymentMethod: "walk-in", total: draftTotal,
+        paymentMethod: "walk-in", deliveryFee: draftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0, total: draftTotal,
         fullName: draftFullName.trim(), phone: draftPhone.trim(),
         createdBy: currentUser?.name,
       }).catch(() => localOrder);
@@ -1179,10 +1181,13 @@ export default function Admin() {
                 </div>
                 <div className="rw-pill-group" style={{ marginBottom: 12 }}>
                   <button className={`rw-pill ${draftFulfilment === "dropoff" ? "active" : ""}`} onClick={() => setDraftFulfilment("dropoff")}>Drop-off in store</button>
-                  <button className={`rw-pill ${draftFulfilment === "pickup" ? "active" : ""}`} onClick={() => setDraftFulfilment("pickup")}>Pickup & deliver (+{money(DELIVERY_FEE)})</button>
+                  <button className={`rw-pill ${draftFulfilment === "pickup" ? "active" : ""}`} onClick={() => setDraftFulfilment("pickup")}>Pickup & deliver (from {money(DELIVERY_FEE)})</button>
                 </div>
                 {draftFulfilment === "pickup" && (
-                  <div style={{ marginBottom: 12 }}><label>Address</label><input value={draftAddress} onChange={(e) => setDraftAddress(e.target.value)} /></div>
+                  <>
+                    <div style={{ marginBottom: 12 }}><label>Address</label><input value={draftAddress} onChange={(e) => setDraftAddress(e.target.value)} /></div>
+                    <div style={{ marginBottom: 12 }}><label>Pickup & delivery fee (minimum {money(DELIVERY_FEE)}; staff can adjust for distance)</label><input type="number" min={DELIVERY_FEE} step="100" value={draftDeliveryFee} onChange={(e) => setDraftDeliveryFee(Math.max(DELIVERY_FEE, Number(e.target.value) || DELIVERY_FEE))} /></div>
+                  </>
                 )}
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
