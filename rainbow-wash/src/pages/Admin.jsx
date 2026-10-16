@@ -61,6 +61,7 @@ export default function Admin() {
   const [newStock, setNewStock] = useState(MIN_UNIT);
   const [newStatus, setNewStatus] = useState("Active");
   const [addingProduct, setAddingProduct] = useState(false);
+  const [pricingDrafts, setPricingDrafts] = useState({});
 
   // "Add new item" input state, one per pricing category — kept minimal since
   // it's just a label/price pair (plus a group for add-ons) before Add is clicked.
@@ -310,9 +311,6 @@ export default function Admin() {
             </button>
           </form>
 
-          <p style={{ fontSize: 12.5, color: "var(--ink-soft)", marginTop: 12 }}>
-            Staff: no pricing or reports access. Manager: everything except Overview & Reports. Admin: full access.
-          </p>
         </div>
       </div>
     );
@@ -542,19 +540,64 @@ export default function Admin() {
     }
   };
 
-  // --- Pricing: full CRUD (rename, reprice, add, delete) across every
-  // category. All Manager/Admin-only, gated at the tab level by
-  // canEditPricing, and now genuinely persisted — every one of these calls
-  // hits the real /api/services backend and then re-fetches, so a price
-  // change shows up for every device within seconds, not just this browser. ---
-  const updateSelfWash = async (id, field, value) => {
-    const item = selfWashRates.find((r) => String(r.id) === String(id));
-    if (!item) return;
-    try {
-      await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: "Self Wash", stock: 5, available: true });
-      refreshServices();
-    } catch (err) { notify(err.message || "Failed to save"); }
+  // Pricing edits remain local while typing; only blur saves to the API.
+  const pricingKey = (category, id) => `${category}:${id}`;
+  const editPricingField = (category, id, field, value) => {
+    const key = pricingKey(category, id);
+    setPricingDrafts((drafts) => ({
+      ...drafts,
+      [key]: { ...(drafts[key] || {}), [field]: value },
+    }));
   };
+  const pricingValue = (item, field, category) =>
+    pricingDrafts[pricingKey(category, item.id)]?.[field] ?? item[field];
+
+  const savePricingItem = async (item, category, fields) => {
+    const key = pricingKey(category, item.id);
+    const draft = pricingDrafts[key];
+    if (!draft) return;
+
+    const next = { ...item, ...draft };
+    const priceFields = fields.filter((field) => field !== "label");
+    if (!String(next.label ?? "").trim() ||
+        priceFields.some((field) =>
+          next[field] === "" || !Number.isFinite(Number(next[field])) ||
+          Number(next[field]) < 0
+        )) {
+      notify("Enter a service name and valid non-negative prices before saving.");
+      return;
+    }
+
+    const payload = {
+      name: String(next.label).trim(),
+      price: Number(next.price ?? next.regular),
+      category,
+      stock: 5,
+      available: true,
+    };
+    if (fields.includes("deep")) payload.deepPrice = Number(next.deep);
+    if (fields.includes("repair")) payload.repairPrice = Number(next.repair);
+
+    try {
+      await updateLaundryService(item.id, payload);
+      setPricingDrafts((drafts) => {
+        const copy = { ...drafts };
+        delete copy[key];
+        return copy;
+      });
+      await refreshServices();
+      notify("Price changes saved.");
+    } catch (err) {
+      notify(err.message || "Failed to save. Your edits are still on screen.");
+    }
+  };
+
+  const updateSelfWash = (id, field, value) => editPricingField("Self Wash", id, field, value);
+  const updateStaffWash = (id, field, value) => editPricingField("Staff Wash", id, field, value);
+  const updateDryClean = (id, field, value) => editPricingField("Dry Cleaning", id, field, value);
+  const updateShoeCare = (id, field, value) => editPricingField("Shoe Care", id, field, value);
+  const updateExpress = (id, field, value) => editPricingField("Express", id, field, value);
+  const updateAddon = (id, field, value, category) => editPricingField(category, id, field, value);
   const deleteSelfWash = async (id) => {
     try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
   };
@@ -567,14 +610,6 @@ export default function Admin() {
     } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateStaffWash = async (id, field, value) => {
-    const item = staffWashRates.find((r) => String(r.id) === String(id));
-    if (!item) return;
-    try {
-      await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: "Staff Wash", stock: 5, available: true });
-      refreshServices();
-    } catch (err) { notify(err.message || "Failed to save"); }
-  };
   const deleteStaffWash = async (id) => {
     try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
   };
@@ -587,15 +622,6 @@ export default function Admin() {
     } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateDryClean = async (id, field, value) => {
-    const item = dryCleanItems.find((i) => String(i.id) === String(id));
-    if (!item) return;
-    const next = { ...item, [field]: field === "label" ? value : Number(value) };
-    try {
-      await updateLaundryService(id, { name: next.label, price: next.regular, deepPrice: next.deep, category: "Dry Cleaning", stock: 5, available: true });
-      refreshServices();
-    } catch (err) { notify(err.message || "Failed to save"); }
-  };
   const deleteDryClean = async (id) => {
     try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
   };
@@ -608,15 +634,6 @@ export default function Admin() {
     } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateShoeCare = async (id, field, value) => {
-    const item = shoeCareItems.find((i) => String(i.id) === String(id));
-    if (!item) return;
-    const next = { ...item, [field]: field === "label" ? value : Number(value) };
-    try {
-      await updateLaundryService(id, { name: next.label, price: next.regular, deepPrice: next.deep, repairPrice: next.repair, category: "Shoe Care", stock: 5, available: true });
-      refreshServices();
-    } catch (err) { notify(err.message || "Failed to save"); }
-  };
   const deleteShoeCare = async (id) => {
     try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
   };
@@ -629,14 +646,6 @@ export default function Admin() {
     } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateExpress = async (id, field, value) => {
-    const item = expressServices.find((i) => String(i.id) === String(id));
-    if (!item) return;
-    try {
-      await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: "Express", stock: 5, available: true });
-      refreshServices();
-    } catch (err) { notify(err.message || "Failed to save"); }
-  };
   const deleteExpress = async (id) => {
     try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
   };
@@ -649,14 +658,6 @@ export default function Admin() {
     } catch (err) { notify(err.message || "Failed to add"); }
   };
 
-  const updateAddon = async (id, field, value) => {
-    const item = addonProducts.find((p) => String(p.id) === String(id));
-    if (!item) return;
-    try {
-      await updateLaundryService(id, { name: field === "label" ? value : item.label, price: field === "price" ? Number(value) : item.price, category: item.group, stock: 5, available: true });
-      refreshServices();
-    } catch (err) { notify(err.message || "Failed to save"); }
-  };
   const deleteAddon = async (id) => {
     try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
   };
@@ -1546,7 +1547,7 @@ export default function Admin() {
 
             <div className="rw-add-product-form">
               <div><label>Product name</label><input placeholder="e.g. Bleach 1L" value={newName} onChange={(e) => setNewName(e.target.value)} /></div>
-              <div><label>Price (₦)</label><input type="number" min="0" placeholder="2500" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} /></div>
+              <div><label>Price (₦)</label><input type="text" inputMode="decimal" min="0" placeholder="2500" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} /></div>
               <div><label>Stock (units)</label><input type="number" min={MIN_UNIT} step="1" value={newStock} onChange={(e) => setNewStock(e.target.value)} /></div>
               <div>
                 <label>Status</label>
@@ -1622,15 +1623,15 @@ export default function Admin() {
               <thead><tr><th>Service Name</th><th>Price (₦/kg)</th><th></th></tr></thead>
               <tbody>
                 {selfWashRates.map((r) => (
-                  <tr key={r.id}>
-                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={r.label} onChange={(e) => updateSelfWash(r.id, "label", e.target.value)} /></td>
-                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateSelfWash(r.id, "price", e.target.value)} /></td>
+                  <tr key={r.id} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) savePricingItem(r, "Self Wash", ["label", "price"]); }}>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={pricingValue(r, "label", "Self Wash")} onChange={(e) => updateSelfWash(r.id, "label", e.target.value)} /></td>
+                    <td><input type="text" inputMode="decimal" step="100" style={{ width: 120, padding: "6px 8px" }} value={pricingValue(r, "price", "Self Wash")} onChange={(e) => updateSelfWash(r.id, "price", e.target.value)} /></td>
                     <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteSelfWash(r.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
                 <tr>
                   <td><input placeholder="New service name" style={{ width: "100%", padding: "6px 8px" }} value={newSelfWash.label} onChange={(e) => setNewSelfWash((s) => ({ ...s, label: e.target.value }))} /></td>
-                  <td><input type="number" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newSelfWash.price} onChange={(e) => setNewSelfWash((s) => ({ ...s, price: e.target.value }))} /></td>
+                  <td><input type="text" inputMode="decimal" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newSelfWash.price} onChange={(e) => setNewSelfWash((s) => ({ ...s, price: e.target.value }))} /></td>
                   <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addSelfWash}><Plus size={13} /></button></td>
                 </tr>
               </tbody>
@@ -1641,15 +1642,15 @@ export default function Admin() {
               <thead><tr><th>Service Name</th><th>Price (₦/kg)</th><th></th></tr></thead>
               <tbody>
                 {staffWashRates.map((r) => (
-                  <tr key={r.id}>
-                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={r.label} onChange={(e) => updateStaffWash(r.id, "label", e.target.value)} /></td>
-                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateStaffWash(r.id, "price", e.target.value)} /></td>
+                  <tr key={r.id} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) savePricingItem(r, "Staff Wash", ["label", "price"]); }}>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={pricingValue(r, "label", "Staff Wash")} onChange={(e) => updateStaffWash(r.id, "label", e.target.value)} /></td>
+                    <td><input type="text" inputMode="decimal" step="100" style={{ width: 120, padding: "6px 8px" }} value={pricingValue(r, "price", "Staff Wash")} onChange={(e) => updateStaffWash(r.id, "price", e.target.value)} /></td>
                     <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteStaffWash(r.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
                 <tr>
                   <td><input placeholder="New service name" style={{ width: "100%", padding: "6px 8px" }} value={newStaffWash.label} onChange={(e) => setNewStaffWash((s) => ({ ...s, label: e.target.value }))} /></td>
-                  <td><input type="number" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newStaffWash.price} onChange={(e) => setNewStaffWash((s) => ({ ...s, price: e.target.value }))} /></td>
+                  <td><input type="text" inputMode="decimal" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newStaffWash.price} onChange={(e) => setNewStaffWash((s) => ({ ...s, price: e.target.value }))} /></td>
                   <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addStaffWash}><Plus size={13} /></button></td>
                 </tr>
               </tbody>
@@ -1660,17 +1661,17 @@ export default function Admin() {
               <thead><tr><th>Item Name</th><th>Regular (₦)</th><th>Deep Clean (₦)</th><th></th></tr></thead>
               <tbody>
                 {dryCleanItems.map((item) => (
-                  <tr key={item.id}>
-                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={item.label} onChange={(e) => updateDryClean(item.id, "label", e.target.value)} /></td>
-                    <td><input type="number" step="100" style={{ width: 110, padding: "6px 8px" }} value={item.regular} onChange={(e) => updateDryClean(item.id, "regular", e.target.value)} /></td>
-                    <td><input type="number" step="100" style={{ width: 110, padding: "6px 8px" }} value={item.deep} onChange={(e) => updateDryClean(item.id, "deep", e.target.value)} /></td>
+                  <tr key={item.id} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) savePricingItem(item, "Dry Cleaning", ["label", "regular", "deep"]); }}>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={pricingValue(item, "label", "Dry Cleaning")} onChange={(e) => updateDryClean(item.id, "label", e.target.value)} /></td>
+                    <td><input type="text" inputMode="decimal" step="100" style={{ width: 110, padding: "6px 8px" }} value={pricingValue(item, "regular", "Dry Cleaning")} onChange={(e) => updateDryClean(item.id, "regular", e.target.value)} /></td>
+                    <td><input type="text" inputMode="decimal" step="100" style={{ width: 110, padding: "6px 8px" }} value={pricingValue(item, "deep", "Dry Cleaning")} onChange={(e) => updateDryClean(item.id, "deep", e.target.value)} /></td>
                     <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteDryClean(item.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
                 <tr>
                   <td><input placeholder="New item name" style={{ width: "100%", padding: "6px 8px" }} value={newDryClean.label} onChange={(e) => setNewDryClean((s) => ({ ...s, label: e.target.value }))} /></td>
-                  <td><input type="number" placeholder="Regular" style={{ width: 110, padding: "6px 8px" }} value={newDryClean.regular} onChange={(e) => setNewDryClean((s) => ({ ...s, regular: e.target.value }))} /></td>
-                  <td><input type="number" placeholder="Deep" style={{ width: 110, padding: "6px 8px" }} value={newDryClean.deep} onChange={(e) => setNewDryClean((s) => ({ ...s, deep: e.target.value }))} /></td>
+                  <td><input type="text" inputMode="decimal" placeholder="Regular" style={{ width: 110, padding: "6px 8px" }} value={newDryClean.regular} onChange={(e) => setNewDryClean((s) => ({ ...s, regular: e.target.value }))} /></td>
+                  <td><input type="text" inputMode="decimal" placeholder="Deep" style={{ width: 110, padding: "6px 8px" }} value={newDryClean.deep} onChange={(e) => setNewDryClean((s) => ({ ...s, deep: e.target.value }))} /></td>
                   <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDryClean}><Plus size={13} /></button></td>
                 </tr>
               </tbody>
@@ -1681,19 +1682,19 @@ export default function Admin() {
               <thead><tr><th>Item Name</th><th>Regular (₦)</th><th>Deep Clean (₦)</th><th>Minor Repairs (₦)</th><th></th></tr></thead>
               <tbody>
                 {shoeCareItems.map((item) => (
-                  <tr key={item.id}>
-                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={item.label} onChange={(e) => updateShoeCare(item.id, "label", e.target.value)} /></td>
-                    <td><input type="number" step="100" style={{ width: 100, padding: "6px 8px" }} value={item.regular} onChange={(e) => updateShoeCare(item.id, "regular", e.target.value)} /></td>
-                    <td><input type="number" step="100" style={{ width: 100, padding: "6px 8px" }} value={item.deep} onChange={(e) => updateShoeCare(item.id, "deep", e.target.value)} /></td>
-                    <td><input type="number" step="100" style={{ width: 100, padding: "6px 8px" }} value={item.repair} onChange={(e) => updateShoeCare(item.id, "repair", e.target.value)} /></td>
+                  <tr key={item.id} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) savePricingItem(item, "Shoe Care", ["label", "regular", "deep", "repair"]); }}>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={pricingValue(item, "label", "Shoe Care")} onChange={(e) => updateShoeCare(item.id, "label", e.target.value)} /></td>
+                    <td><input type="text" inputMode="decimal" step="100" style={{ width: 100, padding: "6px 8px" }} value={pricingValue(item, "regular", "Shoe Care")} onChange={(e) => updateShoeCare(item.id, "regular", e.target.value)} /></td>
+                    <td><input type="text" inputMode="decimal" step="100" style={{ width: 100, padding: "6px 8px" }} value={pricingValue(item, "deep", "Shoe Care")} onChange={(e) => updateShoeCare(item.id, "deep", e.target.value)} /></td>
+                    <td><input type="text" inputMode="decimal" step="100" style={{ width: 100, padding: "6px 8px" }} value={pricingValue(item, "repair", "Shoe Care")} onChange={(e) => updateShoeCare(item.id, "repair", e.target.value)} /></td>
                     <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteShoeCare(item.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
                 <tr>
                   <td><input placeholder="New item name" style={{ width: "100%", padding: "6px 8px" }} value={newShoeCare.label} onChange={(e) => setNewShoeCare((s) => ({ ...s, label: e.target.value }))} /></td>
-                  <td><input type="number" placeholder="Regular" style={{ width: 100, padding: "6px 8px" }} value={newShoeCare.regular} onChange={(e) => setNewShoeCare((s) => ({ ...s, regular: e.target.value }))} /></td>
-                  <td><input type="number" placeholder="Deep" style={{ width: 100, padding: "6px 8px" }} value={newShoeCare.deep} onChange={(e) => setNewShoeCare((s) => ({ ...s, deep: e.target.value }))} /></td>
-                  <td><input type="number" placeholder="Repair" style={{ width: 100, padding: "6px 8px" }} value={newShoeCare.repair} onChange={(e) => setNewShoeCare((s) => ({ ...s, repair: e.target.value }))} /></td>
+                  <td><input type="text" inputMode="decimal" placeholder="Regular" style={{ width: 100, padding: "6px 8px" }} value={newShoeCare.regular} onChange={(e) => setNewShoeCare((s) => ({ ...s, regular: e.target.value }))} /></td>
+                  <td><input type="text" inputMode="decimal" placeholder="Deep" style={{ width: 100, padding: "6px 8px" }} value={newShoeCare.deep} onChange={(e) => setNewShoeCare((s) => ({ ...s, deep: e.target.value }))} /></td>
+                  <td><input type="text" inputMode="decimal" placeholder="Repair" style={{ width: 100, padding: "6px 8px" }} value={newShoeCare.repair} onChange={(e) => setNewShoeCare((s) => ({ ...s, repair: e.target.value }))} /></td>
                   <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addShoeCare}><Plus size={13} /></button></td>
                 </tr>
               </tbody>
@@ -1705,15 +1706,15 @@ export default function Admin() {
               <thead><tr><th>Service Name</th><th>Price (₦)</th><th></th></tr></thead>
               <tbody>
                 {expressServices.map((r) => (
-                  <tr key={r.id}>
-                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={r.label} onChange={(e) => updateExpress(r.id, "label", e.target.value)} /></td>
-                    <td><input type="number" step="100" style={{ width: 120, padding: "6px 8px" }} value={r.price} onChange={(e) => updateExpress(r.id, "price", e.target.value)} /></td>
+                  <tr key={r.id} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) savePricingItem(r, "Express", ["label", "price"]); }}>
+                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={pricingValue(r, "label", "Express")} onChange={(e) => updateExpress(r.id, "label", e.target.value)} /></td>
+                    <td><input type="text" inputMode="decimal" step="100" style={{ width: 120, padding: "6px 8px" }} value={pricingValue(r, "price", "Express")} onChange={(e) => updateExpress(r.id, "price", e.target.value)} /></td>
                     <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteExpress(r.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                   </tr>
                 ))}
                 <tr>
                   <td><input placeholder="e.g. Express Duvet" style={{ width: "100%", padding: "6px 8px" }} value={newExpress.label} onChange={(e) => setNewExpress((s) => ({ ...s, label: e.target.value }))} /></td>
-                  <td><input type="number" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newExpress.price} onChange={(e) => setNewExpress((s) => ({ ...s, price: e.target.value }))} /></td>
+                  <td><input type="text" inputMode="decimal" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newExpress.price} onChange={(e) => setNewExpress((s) => ({ ...s, price: e.target.value }))} /></td>
                   <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addExpress}><Plus size={13} /></button></td>
                 </tr>
               </tbody>
@@ -1730,9 +1731,9 @@ export default function Admin() {
                     <thead><tr><th>Product</th><th>Price (₦)</th><th></th></tr></thead>
                     <tbody>
                       {groupItems.map((ap) => (
-                        <tr key={ap.id}>
-                          <td><input style={{ width: "100%", padding: "6px 8px" }} value={ap.label} onChange={(e) => updateAddon(ap.id, "label", e.target.value)} /></td>
-                          <td><input type="number" step="50" style={{ width: 110, padding: "6px 8px" }} value={ap.price} onChange={(e) => updateAddon(ap.id, "price", e.target.value)} /></td>
+                        <tr key={ap.id} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) savePricingItem(ap, ap.group, ["label", "price"]); }}>
+                          <td><input style={{ width: "100%", padding: "6px 8px" }} value={pricingValue(ap, "label", ap.group)} onChange={(e) => updateAddon(ap.id, "label", e.target.value, ap.group)} /></td>
+                          <td><input type="text" inputMode="decimal" step="50" style={{ width: 110, padding: "6px 8px" }} value={pricingValue(ap, "price", ap.group)} onChange={(e) => updateAddon(ap.id, "price", e.target.value, ap.group)} /></td>
                           <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteAddon(ap.id)}><Trash2 size={13} color="#e0473f" /></button></td>
                         </tr>
                       ))}
@@ -1748,7 +1749,7 @@ export default function Admin() {
             <h4 style={{ fontSize: 14, marginBottom: 10 }}>Add a new product</h4>
             <div className="rw-form-grid" style={{ marginBottom: 30, alignItems: "end" }}>
               <div><label>Product name</label><input placeholder="e.g. Comfort Fabric Softener" value={newAddon.label} onChange={(e) => setNewAddon((s) => ({ ...s, label: e.target.value }))} /></div>
-              <div><label>Price (₦)</label><input type="number" placeholder="2500" value={newAddon.price} onChange={(e) => setNewAddon((s) => ({ ...s, price: e.target.value }))} /></div>
+              <div><label>Price (₦)</label><input type="text" inputMode="decimal" placeholder="2500" value={newAddon.price} onChange={(e) => setNewAddon((s) => ({ ...s, price: e.target.value }))} /></div>
               <div>
                 <label>Category</label>
                 <select value={newAddon.group} onChange={(e) => setNewAddon((s) => ({ ...s, group: e.target.value }))}>
