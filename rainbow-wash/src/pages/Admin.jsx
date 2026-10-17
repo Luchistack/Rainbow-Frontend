@@ -1280,6 +1280,11 @@ export default function Admin() {
                 <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "cleaning" ? null : "cleaning")}>
                   {draftType === "cleaning" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Booking</>}
                 </button>
+                {canClearLists && todaysBookings.length > 0 && (
+                  <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysBookings}>
+                    <RefreshCw size={14} /> Clear list
+                  </button>
+                )}
               </div>
             </div>
 
