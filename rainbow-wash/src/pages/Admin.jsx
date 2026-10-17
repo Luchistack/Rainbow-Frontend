@@ -714,14 +714,12 @@ export default function Admin() {
     }
   };
 
-  // --- Order locking (walk-in & web orders alike) ---
-  // "locked" is true the moment an order exists in a Today's table (it's been
-  // submitted) — from then on, regular Staff can no longer edit its content or
-  // delete it; Manager/Admin still can, right up until it's actually printed.
-  // "printed" becomes true only once a real print button is clicked inside the
-  // print-preview window (see print.js) — after that, nobody can delete it.
+  // --- Order permissions (walk-in & web orders alike) ---
+  // Admin, Manager, and Staff can print and reprint orders.
+  // Only Admin can remove orders from Today's list or permanently delete
+  // records from History. Printing does not change these permissions.
   const canEditOrderContent = role !== "Staff";
-  const canDeleteOrder = (o) => role !== "Staff" && !o.printed;
+  const canDeleteOrder = () => role === "Admin";
   const markLaundryPrinted = (id) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, printed: true } : o))); persistOrder(id, { printed: true }); };
   const markBookingPrinted = (id) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, printed: true } : b))); persistBookingUpdate(id, { printed: true }); };
   const markShopPrinted = (id) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, printed: true } : o))); persistShopOrder(id, { printed: true }); };
