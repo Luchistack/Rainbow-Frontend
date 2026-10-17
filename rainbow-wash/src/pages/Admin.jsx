@@ -841,14 +841,29 @@ export default function Admin() {
   const placeDraftBooking = async () => {
     if (!draftFullName.trim() || !draftPhone.trim()) { notify("Name and phone are required"); return; }
     if (!draftServiceId.trim()) { notify("Please enter a service"); return; }
+    if (!draftSizeId.trim()) { notify("Please enter the size or scope"); return; }
+    if (!draftBookingDate || !draftBookingTime) { notify("Please enter the booking date and time"); return; }
+    if (!draftAddress.trim()) { notify("Please enter the address"); return; }
+
+    const email = draftEmail.trim();
+    if (email && !/^[^@\s]+@[^@\s]+\.com$/i.test(email)) {
+      notify("Enter a valid email ending in .com, or leave it blank");
+      return;
+    }
+
     const payable = draftPayable === "" ? 0 : Number(draftPayable);
+    if (!Number.isFinite(payable) || payable <= 0) {
+      notify("Confirmed price must be greater than zero");
+      return;
+    }
+
     setPlacingDraft(true);
     try {
       const localBooking = {
         id: genRef("CLN"),
         service: draftServiceId.trim(), size: draftSizeId.trim(),
-        date: draftBookingDate, time: draftBookingTime, address: draftAddress,
-        fullName: draftFullName.trim(), phone: draftPhone.trim(), email: "",
+        date: draftBookingDate, time: draftBookingTime, address: draftAddress.trim(),
+        fullName: draftFullName.trim(), phone: draftPhone.trim(), email,
         price: payable, payType: "full", payable,
         paymentStatus: "Pending", status: "Confirmed",
         placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
@@ -857,6 +872,8 @@ export default function Admin() {
       setBookings((bs) => [saved, ...bs]);
       notify(`Walk-in booking ${saved.id || saved.referenceId} placed`);
       resetDraft();
+    } catch (error) {
+      notify(error?.message || "Failed to place cleaning booking. Please try again.");
     } finally {
       setPlacingDraft(false);
     }
@@ -891,15 +908,15 @@ export default function Admin() {
     ...laundryOrders.map((o) => ({
       key: `L-${o.id}`, type: "Laundry", ref: o.id, placedAt: o.placedAt, name: o.fullName, phone: o.phone, email: o.email,
       details: o.items ? o.items.map((i) => `${i.name} ×${i.qty}${i.unit || ""}`).join(", ") : "—",
-      total: o.total, status: o.status, paymentStatus: o.paymentStatus,
+      total: o.total, status: o.status, paymentStatus: o.paymentStatus, record: o,
     })),
     ...bookings.map((b) => ({
       key: `C-${b.id}`, type: "Cleaning", ref: b.id, placedAt: b.placedAt, name: b.fullName, phone: b.phone, email: b.email,
-      details: `${b.service} · ${b.size}`, total: b.payable, status: b.status, paymentStatus: b.paymentStatus,
+      details: `${b.service} · ${b.size}`, total: b.payable, status: b.status, paymentStatus: b.paymentStatus, record: b,
     })),
     ...shopOrders.map((o) => ({
       key: `S-${o.id}`, type: "Shop", ref: o.id, placedAt: o.placedAt, name: o.fullName, phone: o.phone, email: "",
-      details: o.items.map((i) => `${i.name} ×${i.qty}`).join(", "), total: o.total, status: o.status, paymentStatus: o.paymentStatus,
+      details: o.items.map((i) => `${i.name} ×${i.qty}`).join(", "), total: o.total, status: o.status, paymentStatus: o.paymentStatus, record: o,
     })),
   ]
     .filter((r) => {
@@ -1284,6 +1301,10 @@ export default function Admin() {
                   <div><label>Time</label><input type="time" value={draftBookingTime} onChange={(e) => setDraftBookingTime(e.target.value)} /></div>
                   <div><label>Customer name</label><input value={draftFullName} onChange={(e) => setDraftFullName(e.target.value)} /></div>
                   <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} /></div>
+                  <div>
+                    <label>Email (optional)</label>
+                    <input type="email" autoComplete="email" value={draftEmail} onChange={(e) => setDraftEmail(e.target.value)} placeholder="customer@example.com" />
+                  </div>
                   <div style={{ gridColumn: "1 / -1" }}><label>Address</label><input value={draftAddress} onChange={(e) => setDraftAddress(e.target.value)} /></div>
                   <div>
                     <label>Confirmed price (₦)</label>
@@ -1491,7 +1512,7 @@ export default function Admin() {
             </div>
 
             <table className="rw-table">
-              <thead><tr><th>Type</th><th>Ref</th><th>Placed</th><th>Name</th><th>Phone</th><th>Email</th><th>Details</th><th>Total</th><th>Status</th><th>Payment</th>{canSeeOverview && <th></th>}</tr></thead>
+              <thead><tr><th>Type</th><th>Ref</th><th>Placed</th><th>Name</th><th>Phone</th><th>Email</th><th>Details</th><th>Total</th><th>Status</th><th>Payment</th><th>Actions</th></tr></thead>
               <tbody>
                 {historyRows.map((r) => (
                   <tr key={r.key}>
@@ -1505,17 +1526,31 @@ export default function Admin() {
                     <td>{money(r.total)}</td>
                     <td>{r.status}</td>
                     <td>{r.paymentStatus || "—"}</td>
-                    {canSeeOverview && (
-                      <td>
-                        <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteHistoryRow(r)} title="Permanently delete this record">
-                          <Trash2 size={13} color="#e0473f" />
+                    <td>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          className="rw-btn rw-btn-ghost rw-btn-sm"
+                          onClick={() => {
+                            if (r.type === "Laundry") openPrintSlip(r.record, currentUser, () => markLaundryPrinted(r.record.id));
+                            else if (r.type === "Cleaning") openPrintSlip(r.record, currentUser, () => markBookingPrinted(r.record.id));
+                            else if (r.type === "Shop") openPrintSlip(r.record, currentUser, () => markShopPrinted(r.record.id));
+                          }}
+                          title="Reprint saved record"
+                          disabled={!r.record}
+                        >
+                          <Printer size={13} />
                         </button>
-                      </td>
-                    )}
+                        {canSeeOverview && (
+                          <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteHistoryRow(r)} title="Permanently delete this record">
+                            <Trash2 size={13} color="#e0473f" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {historyRows.length === 0 && (
-                  <tr><td colSpan={canSeeOverview ? 11 : 10} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No records match that search and time range.</td></tr>
+                  <tr><td colSpan={11} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No records match that search and time range.</td></tr>
                 )}
               </tbody>
             </table>
