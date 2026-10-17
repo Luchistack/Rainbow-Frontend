@@ -183,7 +183,7 @@ export default function OrderLaundry() {
       notify("Please add a phone number so we can call you when it's ready");
       return;
     }
-    if (!email.trim() || !/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)*\.com$/i.test(email.trim())) {
+    if (email.trim() && !/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)*\.com$/i.test(email.trim())) {
       notify("Please enter a valid email address ending in .com");
       return;
     }
@@ -212,7 +212,11 @@ export default function OrderLaundry() {
         paymentMethod: payment, transferNote,
         total, fullName, phone, email,
       });
-      order = saved || localOrder;
+      if (!saved || !(saved.id || saved.referenceId)) {
+        notify("We couldn't confirm that your order was saved. Please try again.");
+        return;
+      }
+      order = saved;
     } catch (err) {
       notify(err?.message || "We couldn't save your order. Please try again.");
       return;
@@ -510,9 +514,9 @@ export default function OrderLaundry() {
                 <input type="tel" placeholder="e.g. 0803 1111 1111" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
               <div className="rw-field">
-                <label><Mail size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Email <span aria-hidden="true">*</span></label>
-                <input type="email" required autoComplete="email" placeholder="e.g. you@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
+               <label><Mail size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Email (optional)</label>
+               <input type="email" autoComplete="email" placeholder="e.g. you@email.com (optional)" value={email} onChange={(e) => setEmail(e.target.value)} />
+	      </div>
             </div>
           </div>
 

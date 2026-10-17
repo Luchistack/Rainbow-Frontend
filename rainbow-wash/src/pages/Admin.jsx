@@ -96,6 +96,7 @@ export default function Admin() {
   const [draftItems, setDraftItems] = useState([]); // laundry/shop line items being built
   const [draftFullName, setDraftFullName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
+  const [draftEmail, setDraftEmail] = useState("");
   const [draftFulfilment, setDraftFulfilment] = useState("dropoff");
   const [draftAddress, setDraftAddress] = useState("");
   const [draftDeliveryFee, setDraftDeliveryFee] = useState(DELIVERY_FEE);
@@ -731,6 +732,7 @@ export default function Admin() {
     setDraftItems([]);
     setDraftFullName("");
     setDraftPhone("");
+    setDraftEmail("");
     setDraftFulfilment("dropoff");
     setDraftAddress("");
     setDraftMode("pickup");
@@ -814,7 +816,7 @@ export default function Admin() {
       items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price, unit: i.unit })),
       fulfilment: draftFulfilment, address: draftAddress, date: "", time: "",
       payment: "walk-in", paymentStatus: "Pending", transferNote: "",
-      fullName: draftFullName.trim(), phone: draftPhone.trim(), email: "",
+      fullName: draftFullName.trim(), phone: draftPhone.trim(), email: draftEmail.trim(),
       placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
       deliveryFee: draftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0,
       total: draftTotal, status: "Received",
@@ -825,11 +827,11 @@ export default function Admin() {
         items: draftItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, price: i.price })),
         fulfilment: draftFulfilment, address: draftAddress,
         paymentMethod: "walk-in", deliveryFee: draftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0, total: draftTotal,
-        fullName: draftFullName.trim(), phone: draftPhone.trim(),
+        fullName: draftFullName.trim(), phone: draftPhone.trim(), email: draftEmail.trim(),
         createdBy: currentUser?.name,
-      }).catch(() => localOrder);
-      setLaundryOrders((os) => [saved || localOrder, ...os]);
-      notify(`Walk-in order ${(saved || localOrder).id} placed`);
+      });
+      setLaundryOrders((os) => [saved, ...os]);
+      notify(`Walk-in order ${saved.id || saved.referenceId} placed`);
       resetDraft();
     } finally {
       setPlacingDraft(false);
@@ -851,9 +853,9 @@ export default function Admin() {
         paymentStatus: "Pending", status: "Confirmed",
         placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
       };
-      const saved = await createBooking(localBooking).catch(() => localBooking);
+      const saved = await createBooking(localBooking);
       setBookings((bs) => [saved, ...bs]);
-      notify(`Walk-in booking ${saved.id || localBooking.id} placed`);
+      notify(`Walk-in booking ${saved.id || saved.referenceId} placed`);
       resetDraft();
     } finally {
       setPlacingDraft(false);
@@ -876,9 +878,9 @@ export default function Admin() {
         items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
         fullName: draftFullName.trim(), phone: draftPhone.trim(), mode: draftMode,
         total: draftShopTotal, createdBy: currentUser?.name,
-      }).catch(() => localOrder);
-      setShopOrders((os) => [saved || localOrder, ...os]);
-      notify(`Walk-in sale ${(saved || localOrder).id} placed`);
+      });
+      setShopOrders((os) => [saved, ...os]);
+      notify(`Walk-in sale ${saved.id || saved.referenceId} placed`);
       resetDraft();
     } finally {
       setPlacingDraft(false);
@@ -1179,6 +1181,7 @@ export default function Admin() {
                 <div className="rw-form-grid" style={{ marginBottom: 12 }}>
                   <div><label>Customer name</label><input value={draftFullName} onChange={(e) => setDraftFullName(e.target.value)} placeholder="Walk-in customer" /></div>
                   <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} placeholder="0803 123 4567" /></div>
+                  <div><label>Email (optional)</label><input type="email" autoComplete="email" value={draftEmail} onChange={(e) => setDraftEmail(e.target.value)} placeholder="customer@example.com" /></div>
                 </div>
                 <div className="rw-pill-group" style={{ marginBottom: 12 }}>
                   <button className={`rw-pill ${draftFulfilment === "dropoff" ? "active" : ""}`} onClick={() => setDraftFulfilment("dropoff")}>Drop-off in store</button>
