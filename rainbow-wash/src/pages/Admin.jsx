@@ -319,18 +319,31 @@ export default function Admin() {
 
   const lowStock = products.filter((p) => p.stock <= 5).length;
 
-  // Orders/bookings stay visible here until a Manager/Admin explicitly clears
-  // them (not auto-filtered by date) — that was the earlier bug: as soon as
-  // the calendar day rolled over, yesterday's still-open orders would silently
-  // vanish from this list even though nothing had actually been done with them.
+  // Active lists exclude archived records. Keep these filters separate from
+  // Overview counts so clearing a list never removes today's placed orders
+  // from the daily totals.
   const todaysOrders = laundryOrders.filter((o) => !o.archived);
   const todaysBookings = bookings.filter((b) => !b.archived);
   const todaysShopOrders = shopOrders.filter((o) => !o.archived);
 
+  const wasPlacedToday = (record) => {
+    if (!record?.placedAt) return false;
+    const placed = new Date(record.placedAt);
+    const now = new Date();
+    return !Number.isNaN(placed.getTime()) &&
+      placed.getFullYear() === now.getFullYear() &&
+      placed.getMonth() === now.getMonth() &&
+      placed.getDate() === now.getDate();
+  };
+
+  const overviewOrdersToday = laundryOrders.filter(wasPlacedToday);
+  const overviewBookingsToday = bookings.filter(wasPlacedToday);
+  const overviewShopOrdersToday = shopOrders.filter(wasPlacedToday);
+
   const revenueToday =
-    todaysOrders.reduce((s, o) => s + o.total, 0) +
-    todaysBookings.reduce((s, b) => s + b.payable, 0) +
-    todaysShopOrders.reduce((s, o) => s + o.total, 0);
+    overviewOrdersToday.reduce((s, o) => s + (Number(o.total) || 0), 0) +
+    overviewBookingsToday.reduce((s, b) => s + (Number(b.payable) || 0), 0) +
+    overviewShopOrdersToday.reduce((s, o) => s + (Number(o.total) || 0), 0);
 
   // --- Laundry order field updates: optimistic local update, then persist to
   // the backend if this record actually has a real DB id (records that only
@@ -1030,9 +1043,9 @@ export default function Admin() {
               </button>
             </div>
             <div className="rw-stat-grid">
-              <div className="rw-stat-card"><b>{todaysOrders.length}</b><span>Laundry orders today</span></div>
-              <div className="rw-stat-card"><b>{todaysBookings.length}</b><span>Cleaning bookings today</span></div>
-              <div className="rw-stat-card"><b>{todaysShopOrders.length}</b><span>Shop orders today</span></div>
+              <div className="rw-stat-card"><b>{overviewOrdersToday.length}</b><span>Laundry orders today</span></div>
+              <div className="rw-stat-card"><b>{overviewBookingsToday.length}</b><span>Cleaning bookings today</span></div>
+              <div className="rw-stat-card"><b>{overviewShopOrdersToday.length}</b><span>Shop orders today</span></div>
               <div className="rw-stat-card"><b>{money(revenueToday)}</b><span>Revenue today</span></div>
               <div className="rw-stat-card" style={{ background: lowStock ? "#fdece9" : "var(--ice)" }}>
                 <b style={{ color: lowStock ? "var(--bad)" : "var(--navy)" }}>{lowStock}</b>
@@ -1040,8 +1053,8 @@ export default function Admin() {
               </div>
             </div>
             <p style={{ color: "var(--ink-soft)", fontSize: 14.5 }}>
-              These numbers reset automatically at midnight, or instantly if you click "Start New Day" above.
-              Nothing is ever delayed, everything moves into <b>History</b>, searchable by day, week, month or year.
+              Overview counts all orders and bookings placed today, whether pending, completed, or archived from the active lists.
+              Previous orders remain available in <b>History</b>, searchable by date.
             </p>
           </div>
         )}
