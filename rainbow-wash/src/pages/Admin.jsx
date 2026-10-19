@@ -1029,7 +1029,11 @@ export default function Admin() {
                     </div>
                     <div>
                       <label>Weight (kg)</label>
-                      <input type="number" step="0.5" min="0.5" style={{ width: 90 }} value={draftWashWeight} onChange={(e) => setDraftWashWeight(Number(e.target.value))} />
+                      <div className="rw-stepper">
+                        <button type="button" aria-label="Decrease weight" onClick={() => setDraftWashWeight((w) => Math.max(1, Number(w || 1) - 1))}><Minus size={15} /></button>
+                        <span style={{ fontWeight: 700, minWidth: 40, textAlign: "center" }}>{Math.max(1, Number(draftWashWeight) || 1)} kg</span>
+                        <button type="button" aria-label="Increase weight" onClick={() => setDraftWashWeight((w) => Math.min(100, (Number(w) || 1) + 1))}><Plus size={15} /></button>
+                      </div>
                     </div>
                     <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftWashLine}><Plus size={13} /> Add</button>
                   </div>

@@ -31,7 +31,7 @@ export default function Footer() {
           <ul>
             <li><MapPin size={15} /> {BUSINESS_INFO.address}</li>
             <li><Phone size={15} /> <a href={`tel:${BUSINESS_INFO.phones[0].replace(/\s/g, "")}`}>{BUSINESS_INFO.phones[0]}</a></li>
-            <li><MessageCircle size={15} /> <a href="https://wa.me/2349165896730" target="_blank" rel="noopener noreferrer">WhatsApp: {BUSINESS_INFO.phones[1]}</a></li>
+            <li><MessageCircle size={15} /> <a href="https://wa.me/2349165896730" target="_blank" rel="noopener noreferrer">{BUSINESS_INFO.phones[1]}</a></li>
           </ul>
           <a
             href={MAPS_LINK}

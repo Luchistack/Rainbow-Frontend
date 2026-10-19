@@ -67,7 +67,7 @@ export default function OrderLaundry() {
   const [items, setItems] = useState([]);
 
   const [washRateId, setWashRateId] = useState(selfWashRates[0].id);
-  const [washWeight, setWashWeight] = useState(3);
+  const [washWeight, setWashWeight] = useState(1);
 
   const [dcItemId, setDcItemId] = useState(dryCleanItems[0].id);
   const [dcType, setDcType] = useState("regular");
@@ -289,9 +289,9 @@ export default function OrderLaundry() {
                   <div className="rw-field">
                     <label>Weight (kg)</label>
                     <div className="rw-stepper">
-                      <button onClick={() => setWashWeight((w) => Math.max(1, w - 0.5))}><Minus size={15} /></button>
-                      <span style={{ fontWeight: 700, minWidth: 40, textAlign: "center" }}>{washWeight} kg</span>
-                      <button onClick={() => setWashWeight((w) => Math.min(40, w + 0.5))}><Plus size={15} /></button>
+                      <button type="button" aria-label="Decrease weight" onClick={() => setWashWeight((w) => Math.max(1, Number(w || 1) - 1))}><Minus size={15} /></button>
+                      <span style={{ fontWeight: 700, minWidth: 40, textAlign: "center" }}>{Math.max(1, Number(washWeight) || 1)} kg</span>
+                      <button type="button" aria-label="Increase weight" onClick={() => setWashWeight((w) => Math.min(100, (Number(w) || 1) + 1))}><Plus size={15} /></button>
                     </div>
 
                   </div>
