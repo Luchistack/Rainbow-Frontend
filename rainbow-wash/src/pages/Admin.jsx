@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Lock, LayoutDashboard, Truck, Calendar, Package, Plus, ShoppingBag, History, Search,
+  Lock, LayoutDashboard, Truck, Calendar, Package, Plus, Minus, ShoppingBag, History, Search,
   Archive, Shirt, RefreshCw, DollarSign, BarChart3, Printer, LogOut, User, Eye, EyeOff, KeyRound, Shield, Trash2,
   Zap, ChevronDown, ChevronUp, X,
 } from "lucide-react";
@@ -1056,7 +1056,11 @@ export default function Admin() {
                     </div>
                     <div>
                       <label>Qty</label>
-                      <input type="number" min="1" style={{ width: 70 }} value={draftDcQty} onChange={(e) => setDraftDcQty(Number(e.target.value))} />
+                      <div className="rw-stepper">
+                        <button type="button" aria-label="Decrease quantity" onClick={() => setDraftDcQty((q) => Math.max(1, (Number(q) || 1) - 1))}><Minus size={15} /></button>
+                        <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>{Math.max(1, Number(draftDcQty) || 1)}</span>
+                        <button type="button" aria-label="Increase quantity" onClick={() => setDraftDcQty((q) => Math.min(100, (Number(q) || 1) + 1))}><Plus size={15} /></button>
+                      </div>
                     </div>
                     <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftDryCleanLine}><Plus size={13} /> Add</button>
                   </div>
@@ -1080,7 +1084,11 @@ export default function Admin() {
                     </div>
                     <div>
                       <label>Qty</label>
-                      <input type="number" min="1" style={{ width: 70 }} value={draftScQty} onChange={(e) => setDraftScQty(Number(e.target.value))} />
+                      <div className="rw-stepper">
+                        <button type="button" aria-label="Decrease quantity" onClick={() => setDraftScQty((q) => Math.max(1, (Number(q) || 1) - 1))}><Minus size={15} /></button>
+                        <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>{Math.max(1, Number(draftScQty) || 1)}</span>
+                        <button type="button" aria-label="Increase quantity" onClick={() => setDraftScQty((q) => Math.min(100, (Number(q) || 1) + 1))}><Plus size={15} /></button>
+                      </div>
                     </div>
                     <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftShoeCareLine}><Plus size={13} /> Add</button>
                   </div>
@@ -1096,7 +1104,11 @@ export default function Admin() {
                     </div>
                     <div>
                       <label>Qty</label>
-                      <input type="number" min="1" style={{ width: 70 }} value={draftExQty} onChange={(e) => setDraftExQty(Number(e.target.value))} />
+                      <div className="rw-stepper">
+                        <button type="button" aria-label="Decrease quantity" onClick={() => setDraftExQty((q) => Math.max(1, (Number(q) || 1) - 1))}><Minus size={15} /></button>
+                        <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>{Math.max(1, Number(draftExQty) || 1)}</span>
+                        <button type="button" aria-label="Increase quantity" onClick={() => setDraftExQty((q) => Math.min(100, (Number(q) || 1) + 1))}><Plus size={15} /></button>
+                      </div>
                     </div>
                     <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftExpressLine}><Plus size={13} /> Add</button>
                   </div>
@@ -1119,7 +1131,11 @@ export default function Admin() {
                     </div>
                     <div>
                       <label>Qty</label>
-                      <input type="number" min="1" style={{ width: 70 }} value={draftProductQty} onChange={(e) => setDraftProductQty(Number(e.target.value))} />
+                      <div className="rw-stepper">
+                        <button type="button" aria-label="Decrease quantity" onClick={() => setDraftProductQty((q) => Math.max(1, (Number(q) || 1) - 1))}><Minus size={15} /></button>
+                        <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>{Math.max(1, Number(draftProductQty) || 1)}</span>
+                        <button type="button" aria-label="Increase quantity" onClick={() => setDraftProductQty((q) => Math.min(100, (Number(q) || 1) + 1))}><Plus size={15} /></button>
+                      </div>
                     </div>
                     <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftProductLine}><Plus size={13} /> Add</button>
                   </div>
@@ -1356,7 +1372,11 @@ export default function Admin() {
                   </div>
                   <div>
                     <label>Qty</label>
-                    <input type="number" min="1" style={{ width: 70 }} value={draftProductQty} onChange={(e) => setDraftProductQty(Number(e.target.value))} />
+                    <div className="rw-stepper">
+                        <button type="button" aria-label="Decrease quantity" onClick={() => setDraftProductQty((q) => Math.max(1, (Number(q) || 1) - 1))}><Minus size={15} /></button>
+                        <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>{Math.max(1, Number(draftProductQty) || 1)}</span>
+                        <button type="button" aria-label="Increase quantity" onClick={() => setDraftProductQty((q) => Math.min(100, (Number(q) || 1) + 1))}><Plus size={15} /></button>
+                      </div>
                   </div>
                   <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftProductLine}><Plus size={13} /> Add</button>
                 </div>
