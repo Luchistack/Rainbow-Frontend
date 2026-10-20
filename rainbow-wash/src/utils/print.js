@@ -461,3 +461,159 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     window.addEventListener("message", handler);
   }
 }
+
+
+// Dedicated print slip for online Express quote requests.
+// This is intentionally separate from normal laundry receipts:
+// no VAT calculation and no implication that payment has been made.
+export const openExpressQuotePrintSlip = (request, staffUser, onPrinted) => {
+  if (!request) {
+    alert("Express quote details are unavailable.");
+    return;
+  }
+
+  const price = Number(request.quotedPrice);
+  if (!Number.isFinite(price) || price <= 0) {
+    alert("Save a valid quote price before printing.");
+    return;
+  }
+
+  const escapeHtml = (value) =>
+    String(value ?? "").replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    })[character]);
+
+  const formatMoney = (value) =>
+    new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      maximumFractionDigits: 2,
+    }).format(value);
+
+  const reference = request.id || request.referenceId || "—";
+  const turnaround = ({
+    "same-day": "Same day Express",
+    "next-day": "Next day Express",
+  })[request.turnaround] || request.turnaround || "—";
+
+  const date = request.placedAt
+    ? new Date(request.placedAt).toLocaleString("en-NG")
+    : new Date().toLocaleString("en-NG");
+
+  const staffName =
+    staffUser?.fullName ||
+    staffUser?.name ||
+    staffUser?.username ||
+    staffUser?.email ||
+    "Rainbow Wash staff";
+
+  const popup = window.open("", "_blank", "width=850,height=950");
+  if (!popup) {
+    alert("Your browser blocked the print window. Allow pop-ups and try again.");
+    return;
+  }
+
+  popup.document.open();
+  popup.document.write(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Express Quote ${escapeHtml(reference)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; color: #171717; font: 14px/1.5 Arial, sans-serif; }
+  .toolbar { display: flex; justify-content: flex-end; gap: 8px; margin: 0 auto 18px; max-width: 760px; }
+  button { border: 0; padding: 10px 16px; border-radius: 5px; cursor: pointer; }
+  .print { background: #111; color: #fff; }
+  .close { background: #eee; color: #111; }
+  .sheet { max-width: 760px; margin: auto; border: 1px solid #ddd; padding: 32px; }
+  .brand { font-size: 23px; font-weight: 800; letter-spacing: 1px; }
+  .subtitle { color: #555; margin-top: 3px; }
+  .heading { margin: 28px 0 4px; font-size: 22px; font-weight: 800; }
+  .status { display: inline-block; margin: 8px 0 20px; padding: 5px 10px; border: 1px solid #aaa; border-radius: 4px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 22px 0; }
+  .field { margin: 0 0 12px; overflow-wrap: anywhere; }
+  .label { display: block; color: #666; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+  .value { font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .description { border: 1px solid #ddd; padding: 14px; min-height: 70px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .amount { margin-top: 24px; padding: 18px; background: #f5f5f5; }
+  .amount-label { color: #555; font-size: 12px; text-transform: uppercase; }
+  .amount-value { font-size: 27px; font-weight: 800; margin-top: 4px; }
+  .notice { margin-top: 18px; padding: 12px; border: 1px solid #ddd; }
+  .footer { margin-top: 28px; border-top: 1px solid #ddd; padding-top: 12px; color: #555; font-size: 11px; }
+  @media print {
+    body { padding: 0; }
+    .toolbar { display: none; }
+    .sheet { max-width: none; border: 0; padding: 12mm; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="close" onclick="window.close()">Close</button>
+    <button class="print" onclick="window.print()">Print quote</button>
+  </div>
+  <main class="sheet">
+    <div class="brand">RAINBOW WASH</div>
+    <div class="subtitle">Laundry and Cleaning Services</div>
+    <div class="heading">EXPRESS SERVICE QUOTE</div>
+    <div>Reference: <strong>${escapeHtml(reference)}</strong></div>
+    <div class="status">${escapeHtml(request.status || "Quoted")}</div>
+
+    <div class="grid">
+      <section>
+        <div class="field"><span class="label">Customer</span><span class="value">${escapeHtml(request.fullName)}</span></div>
+        <div class="field"><span class="label">Phone</span><span class="value">${escapeHtml(request.phone)}</span></div>
+        <div class="field"><span class="label">Email</span><span class="value">${escapeHtml(request.email || "—")}</span></div>
+      </section>
+      <section>
+        <div class="field"><span class="label">Request date</span><span class="value">${escapeHtml(date)}</span></div>
+        <div class="field"><span class="label">Service</span><span class="value">${escapeHtml(request.service)}</span></div>
+        <div class="field"><span class="label">Turnaround</span><span class="value">${escapeHtml(turnaround)}</span></div>
+      </section>
+    </div>
+
+    <div class="field"><span class="label">Customer's description</span></div>
+    <div class="description">${escapeHtml(request.description || "—")}</div>
+
+    <div class="amount">
+      <div class="amount-label">Quoted price — not a payment receipt</div>
+      <div class="amount-value">${escapeHtml(formatMoney(price))}</div>
+    </div>
+
+    <div class="notice">
+      This document is a quotation only. It is not proof of payment, does not include a VAT calculation,
+      and does not confirm that payment has been received. Final service arrangements remain subject
+      to confirmation with Rainbow Wash.
+    </div>
+
+    <div class="footer">
+      Prepared by ${escapeHtml(staffName)} · Printed ${escapeHtml(new Date().toLocaleString("en-NG"))}
+    </div>
+  </main>
+<script>
+  window.addEventListener("afterprint", () => {
+    if (window.opener) {
+      window.opener.postMessage({
+        rainbowWashExpressQuotePrinted: true,
+        quoteId: ${JSON.stringify(String(reference))}
+      }, "*");
+    }
+  });
+</script>
+</body>
+</html>`);
+  popup.document.close();
+
+  const handleMessage = (event) => {
+    if (event.source !== popup || !event.data?.rainbowWashExpressQuotePrinted) return;
+    window.removeEventListener("message", handleMessage);
+    if (typeof onPrinted === "function") onPrinted();
+  };
+  window.addEventListener("message", handleMessage);
+};

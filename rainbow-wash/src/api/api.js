@@ -306,3 +306,37 @@ export const deleteEmployee = async (id) => {
   }
   return true;
 };
+// --- EXPRESS QUOTE REQUESTS ---
+export const createExpressQuoteRequest = async (requestData) => {
+  const response = await fetch(`${API_BASE_URL}/express-quote-requests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestData),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'Failed to submit express quote request');
+  }
+  return mapRef(data);
+};
+
+export const fetchExpressQuoteRequests = async () => {
+  const response = await fetch(`${API_BASE_URL}/express-quote-requests`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Failed to fetch express quote requests');
+  return mapRefList(await response.json());
+};
+
+export const updateExpressQuoteRequest = async (dbId, patch) => {
+  const response = await fetch(`${API_BASE_URL}/express-quote-requests/${dbId}`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(patch),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'Failed to update express quote request');
+  }
+  return mapRef(data);
+};

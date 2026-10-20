@@ -9,12 +9,13 @@ import {
 } from "../data/constants";
 import { money, formatPlacedAt, matchesRange, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
-import { openPrintSlip } from "../utils/print";
+import { openPrintSlip, openExpressQuotePrintSlip } from "../utils/print";
 import {
   loginAdmin, logoutUser, createEmployee, fetchEmployees, resetEmployeePassword, deleteEmployee, changePassword,
   createProduct, updateProduct, deleteProduct, createBooking, updateBooking,
   createOrder, updateOrder, deleteOrder, createShopOrder, updateShopOrder, deleteShopOrder, deleteBooking,
   createLaundryService, updateLaundryService, deleteLaundryService,
+  fetchExpressQuoteRequests, updateExpressQuoteRequest,
 } from "../api/api";
 
 const MIN_UNIT = 5;
@@ -108,6 +109,8 @@ export default function Admin() {
   const [draftScQty, setDraftScQty] = useState(1);
   const [draftExItemId, setDraftExItemId] = useState("");
   const [draftExQty, setDraftExQty] = useState(1);
+  const [draftExTurnaround, setDraftExTurnaround] = useState("same-day");
+  const [draftExPrice, setDraftExPrice] = useState("");
   // Shop draft product picker
   const [draftProductId, setDraftProductId] = useState("");
   const [draftProductQty, setDraftProductQty] = useState(1);
@@ -137,7 +140,13 @@ export default function Admin() {
 
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyRange, setHistoryRange] = useState("week");
-  const [historyDate, setHistoryDate] = useState(""); // used only when historyRange === "custom"
+  const [historyDate, setHistoryDate] = useState("");
+  const [expressQuoteRequests, setExpressQuoteRequests] = useState([]);
+  const [expressQuotesLoading, setExpressQuotesLoading] = useState(false);
+  const [editingExpressQuoteId, setEditingExpressQuoteId] = useState(null);
+  const [expressQuotePriceDraft, setExpressQuotePriceDraft] = useState("");
+  const [expressQuoteStatusDraft, setExpressQuoteStatusDraft] = useState("Quoted");
+  const [savingExpressQuoteId, setSavingExpressQuoteId] = useState(null); // used only when historyRange === "custom"
   const [reportsRange, setReportsRange] = useState("month");
 
   // Turns the backend's "ADMIN" / "MANAGER" / "STAFF" (Java enum .name()) into the
@@ -232,6 +241,78 @@ export default function Admin() {
     if (pickerItems.length && !pickerItems.find((p) => String(p.id) === String(draftProductId))) setDraftProductId(pickerItems[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, addonProducts]);
+
+  const loadExpressQuoteRequests = async (quiet = false) => {
+    setExpressQuotesLoading(true);
+    try {
+      const rows = await fetchExpressQuoteRequests();
+      setExpressQuoteRequests(Array.isArray(rows) ? rows : []);
+      return true;
+    } catch (error) {
+      if (!quiet) notify(error?.message || "Could not load Express quote requests");
+      return false;
+    } finally {
+      setExpressQuotesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) loadExpressQuoteRequests(true);
+    else setExpressQuoteRequests([]);
+  }, [currentUser]);
+
+  const beginExpressQuoteEdit = (request) => {
+    setEditingExpressQuoteId(request.dbId);
+    setExpressQuotePriceDraft(
+      request.quotedPrice == null ? "" : String(request.quotedPrice)
+    );
+    setExpressQuoteStatusDraft(
+      request.status === "Pending Quote" ? "Quoted" : (request.status || "Quoted")
+    );
+  };
+
+  const saveExpressQuote = async (request) => {
+    const price = Number(expressQuotePriceDraft);
+    if (!Number.isFinite(price) || price <= 0) {
+      notify("Enter a quote price greater than zero before saving");
+      return;
+    }
+    if (!request.dbId) {
+      notify("Quote database ID missing. Refresh and try again.");
+      return;
+    }
+    setSavingExpressQuoteId(request.dbId);
+    try {
+      const saved = await updateExpressQuoteRequest(request.dbId, {
+        quotedPrice: price,
+        status: expressQuoteStatusDraft,
+      });
+      setExpressQuoteRequests((previous) =>
+        previous.map((item) => item.dbId === saved.dbId ? { ...item, ...saved } : item)
+      );
+      setEditingExpressQuoteId(null);
+      notify("Express quote saved");
+    } catch (error) {
+      notify(error?.message || "Could not save the Express quote");
+    } finally {
+      setSavingExpressQuoteId(null);
+    }
+  };
+
+  const markExpressQuotePrinted = async (request) => {
+    if (!request.dbId) {
+      notify("Quote database ID missing; printed status was not saved");
+      return;
+    }
+    try {
+      const saved = await updateExpressQuoteRequest(request.dbId, { printed: true });
+      setExpressQuoteRequests((previous) =>
+        previous.map((item) => item.dbId === saved.dbId ? { ...item, ...saved } : item)
+      );
+    } catch (error) {
+      notify(error?.message || "Printed status could not be saved");
+    }
+  };
 
   if (!currentUser) {
     return (
@@ -715,6 +796,9 @@ export default function Admin() {
     setDraftPayable("");
     setDraftProductId("");
     setDraftProductQty(1);
+    setDraftExTurnaround("same-day");
+    setDraftExPrice("");
+    setDraftExQty(1);
   };
 
   const openDraft = (type) => {
@@ -757,8 +841,14 @@ export default function Admin() {
   };
   const addDraftExpressLine = () => {
     const item = expressServices.find((i) => String(i.id) === String(draftExItemId));
-    if (!item) { notify("Prices are still loading, try again in a moment"); return; }
-    addDraftItem(item.label, draftExQty, item.price, "");
+    if (!item) { notify("Express services are still loading, try again"); return; }
+    if (draftExPrice.trim() === "" || !Number.isFinite(Number(draftExPrice)) || Number(draftExPrice) <= 0) {
+      notify("Enter the price for this Express service");
+      return;
+    }
+    const turnaround = draftExTurnaround === "same-day" ? "Same day Express" : "Next day Express";
+    addDraftItem(`${item.label} (${turnaround})`, Math.max(1, Number(draftExQty) || 1), Number(draftExPrice), "");
+    setDraftExPrice("");
   };
   // Combines the real Shop inventory with the Pricing tab's add-on catalog —
   // from a walk-in customer's point of view these are all just "things we can
@@ -877,6 +967,25 @@ export default function Admin() {
   };
 
   const historyRows = [
+    ...expressQuoteRequests.map((q) => ({
+      key: `E-${q.id || q.referenceId}`,
+      type: "Express Quote",
+      ref: q.id || q.referenceId,
+      placedAt: q.placedAt,
+      name: q.fullName,
+      phone: q.phone,
+      email: q.email,
+      details: [
+        q.service,
+        q.turnaround === "same-day" ? "Same day Express" :
+          q.turnaround === "next-day" ? "Next day Express" : q.turnaround,
+        q.description,
+      ].filter(Boolean).join(" · "),
+      total: q.quotedPrice,
+      status: q.status || "Pending Quote",
+      paymentStatus: "Not paid — quote only",
+      record: q,
+    })),
     ...laundryOrders.map((o) => ({
       key: `L-${o.id}`, type: "Laundry", ref: o.id, placedAt: o.placedAt, name: o.fullName, phone: o.phone, email: o.email,
       details: o.items ? o.items.map((i) => `${i.name} ×${i.qty}${i.unit || ""}`).join(", ") : "—",
@@ -951,7 +1060,18 @@ export default function Admin() {
           </div>
         </div>
         <button
-          onClick={async () => { notify("Refreshing…"); const ok = await refreshAll(); if (ok) notify("Up to date"); }}
+          onClick={async () => {
+            notify("Refreshing…");
+            const results = await Promise.allSettled([
+              refreshAll(),
+              loadExpressQuoteRequests(true),
+            ]);
+            const ok = results.some((result) =>
+              result.status === "fulfilled" && result.value
+            );
+            if (ok) notify("Up to date");
+            else notify("Refresh failed. Please try again.");
+          }}
           style={{ marginBottom: 6 }}
         >
           <RefreshCw size={16} /> Refresh Now
@@ -1099,8 +1219,19 @@ export default function Admin() {
                     <div style={{ flex: "1 1 220px" }}>
                       <label>Express service</label>
                       <select value={draftExItemId} onChange={(e) => setDraftExItemId(e.target.value)}>
-                        {expressServices.map((i) => <option key={i.id} value={i.id}>{i.label}, {money(i.price)}</option>)}
+                        {expressServices.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
                       </select>
+                    </div>
+                    <div style={{ flex: "1 1 150px" }}>
+                      <label>Turnaround</label>
+                      <select value={draftExTurnaround} onChange={(e) => setDraftExTurnaround(e.target.value)}>
+                        <option value="same-day">Same day</option>
+                        <option value="next-day">Next day</option>
+                      </select>
+                    </div>
+                    <div style={{ flex: "1 1 150px" }}>
+                      <label>Price (₦)</label>
+                      <input type="number" min="1" step="0.01" value={draftExPrice} onChange={(e) => setDraftExPrice(e.target.value)} placeholder="Enter price" />
                     </div>
                     <div>
                       <label>Qty</label>
@@ -1113,7 +1244,6 @@ export default function Admin() {
                     <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftExpressLine}><Plus size={13} /> Add</button>
                   </div>
                 )}
-
                 {draftCategory === "shop" && (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
                     <div style={{ flex: "1 1 220px" }}>
@@ -1491,21 +1621,69 @@ export default function Admin() {
                     <td>{r.phone || "—"}</td>
                     <td>{r.email || "—"}</td>
                     <td>{r.details}</td>
-                    <td>{money(r.total)}</td>
-                    <td>{r.status}</td>
+                    <td>
+                      {r.type === "Express Quote" && r.total == null
+                        ? "Awaiting quote" : money(r.total)}
+                      {r.type === "Express Quote" && editingExpressQuoteId === r.record?.dbId && (
+                        <div style={{ marginTop: 6 }}>
+                          <label style={{ display: "block", fontSize: 11 }}>Quote price (₦)</label>
+                          <input type="number" min="0.01" step="0.01"
+                            value={expressQuotePriceDraft}
+                            onChange={(e) => setExpressQuotePriceDraft(e.target.value)}
+                            style={{ width: 125, padding: 6 }} />
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      {r.type === "Express Quote" && editingExpressQuoteId === r.record?.dbId ? (
+                        <select value={expressQuoteStatusDraft}
+                          onChange={(e) => setExpressQuoteStatusDraft(e.target.value)}
+                          style={{ minWidth: 145, padding: 6 }}>
+                          <option value="Pending Quote">Pending Quote</option>
+                          <option value="Quoted">Quoted</option>
+                          <option value="Confirmed">Confirmed</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Completed">Completed</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
+                      ) : r.status}
+                    </td>
                     <td>{r.paymentStatus || "—"}</td>
                     <td>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button
-                          className="rw-btn rw-btn-ghost rw-btn-sm"
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {r.type === "Express Quote" && (
+                          editingExpressQuoteId === r.record?.dbId ? (
+                            <>
+                              <button className="rw-btn rw-btn-primary rw-btn-sm"
+                                onClick={() => saveExpressQuote(r.record)}
+                                disabled={savingExpressQuoteId === r.record?.dbId}>
+                                {savingExpressQuoteId === r.record?.dbId ? "Saving..." : "Save"}
+                              </button>
+                              <button className="rw-btn rw-btn-ghost rw-btn-sm"
+                                onClick={() => setEditingExpressQuoteId(null)}
+                                disabled={savingExpressQuoteId === r.record?.dbId}>Cancel</button>
+                            </>
+                          ) : (
+                            <button className="rw-btn rw-btn-ghost rw-btn-sm"
+                              onClick={() => beginExpressQuoteEdit(r.record)}
+                              title="Edit quote price and status">Edit quote</button>
+                          )
+                        )}
+                        <button className="rw-btn rw-btn-ghost rw-btn-sm"
                           onClick={() => {
                             if (r.type === "Laundry") openPrintSlip(r.record, currentUser, () => markLaundryPrinted(r.record.id));
                             else if (r.type === "Cleaning") openPrintSlip(r.record, currentUser, () => markBookingPrinted(r.record.id));
                             else if (r.type === "Shop") openPrintSlip(r.record, currentUser, () => markShopPrinted(r.record.id));
+                            else if (r.type === "Express Quote") {
+                              openExpressQuotePrintSlip(r.record, currentUser, () => markExpressQuotePrinted(r.record));
+                            }
                           }}
-                          title="Reprint saved record"
-                          disabled={!r.record}
-                        >
+                          title={r.type === "Express Quote"
+                            ? (Number(r.record?.quotedPrice) > 0 ? "Print saved quote" : "Save a quote price before printing")
+                            : "Reprint saved record"}
+                          disabled={!r.record || (
+                            r.type === "Express Quote" && !(Number(r.record?.quotedPrice) > 0)
+                          )}>
                           <Printer size={13} />
                         </button>
                       </div>

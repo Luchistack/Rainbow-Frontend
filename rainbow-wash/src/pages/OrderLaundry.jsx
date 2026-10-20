@@ -11,7 +11,7 @@ import {
 } from "../data/constants";
 import { money, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
-import { createOrder } from "../api/api";
+import { createOrder, createExpressQuoteRequest } from "../api/api";
 
 const CATEGORIES = [
   { id: "selfwash", label: "Self Wash", icon: Shirt },
@@ -73,8 +73,9 @@ export default function OrderLaundry() {
   const [dcType, setDcType] = useState("regular");
   const [dcQty, setDcQty] = useState(1);
   const [exItemId, setExItemId] = useState(expressServices[0].id);
-  const [exQty, setExQty] = useState(1);
   const [exTurnaround, setExTurnaround] = useState("same-day");
+  const [exDescription, setExDescription] = useState("");
+  const [expressRequest, setExpressRequest] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scItemId, setScItemId] = useState(shoeCareItems[0].id);
   const [scType, setScType] = useState("regular");
@@ -145,12 +146,19 @@ export default function OrderLaundry() {
   };
 
   const addExpressLine = () => {
-    // Price is deliberately 0 here — Express is never shown or charged a price
-    // on the public site, it's confirmed with the customer via WhatsApp before
-    // anything is charged, same as Home/Office/Deep Clean/Upholstery bookings.
     const item = expressServices.find((i) => String(i.id) === String(exItemId));
-    if (!item) { notify("Prices are still loading, try again in a moment"); return; }
-    addItem(`${item.label} (${exTurnaround === "same-day" ? "Same-day Express" : "Next-day Express"} — Price via WhatsApp)`, exQty, 0, "");
+    if (!item) { notify("Express services are still loading, try again"); return; }
+    if (!exDescription.trim()) { notify("Please describe the work you need"); return; }
+    if (items.length > 0) {
+      notify("Please submit Express requests separately from priced laundry items.");
+      return;
+    }
+    setExpressRequest({
+      service: item.label,
+      turnaround: exTurnaround,
+      description: exDescription.trim(),
+    });
+    notify("Express request details added. Enter your contact details and submit.");
   };
 
   const addShoeCareLine = () => {
@@ -174,6 +182,41 @@ export default function OrderLaundry() {
 
   const submit = async () => {
     if (isSubmitting) return;
+    if (expressRequest) {
+      if (!fullName.trim()) { notify("Please add your full name"); return; }
+      if (!phone.trim()) { notify("Please add a phone number so we can contact you"); return; }
+      if (email.trim() && !/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)*\\.com$/i.test(email.trim())) {
+        notify("Please enter a valid email address ending in .com");
+        return;
+      }
+      setIsSubmitting(true);
+      try {
+        const saved = await createExpressQuoteRequest({
+          fullName: fullName.trim(),
+          phone: phone.trim(),
+          email: email.trim() || null,
+          service: expressRequest.service,
+          turnaround: expressRequest.turnaround,
+          description: expressRequest.description,
+        });
+        if (!saved || !(saved.id || saved.referenceId)) {
+          notify("We couldn't confirm that your Express request was saved. Please try again.");
+          return;
+        }
+        setPlaced({
+          ...saved,
+          isExpressQuote: true,
+          phone: phone.trim(),
+          fullName: fullName.trim(),
+        });
+        notify(`Express request ${saved.id} submitted. Price pending staff review.`);
+      } catch (err) {
+        notify(err?.message || "We couldn't save your Express request. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
     if (items.length === 0) {
       notify("Add at least one item to your order first");
       return;
@@ -239,12 +282,15 @@ export default function OrderLaundry() {
       <div className="rw-section" style={{ maxWidth: 560 }}>
         <div className="rw-card" style={{ textAlign: "center", padding: 40 }}>
           <CheckCircle2 size={44} color="#39B54A" style={{ marginBottom: 12 }} />
-          <h2>Order placed!</h2>
+          <h2>{placed.isExpressQuote ? "Express quote request received!" : "Order placed!"}</h2>
           <p style={{ color: "var(--ink-soft)", margin: "10px 0 4px" }}>Your reference number</p>
-          <div className="mono" style={{ fontSize: 23, fontWeight: 700, color: "var(--navy)" }}>{placed.id}</div>
+          <div className="mono" style={{ fontSize: 23, fontWeight: 700, color: "var(--navy)" }}>
+            {placed.id || placed.referenceId || "Pending"}
+          </div>
           <p style={{ color: "var(--ink-soft)", marginTop: 14 }}>
-            A receipt has opened in WhatsApp to send to our team. We'll call {placed.phone} when it's ready,
-            you can also follow status on the Track Order page.
+            {placed.isExpressQuote
+              ? `Your Express request has been saved. Our team will review the details and contact ${placed.phone} with a quote. No payment has been recorded.`
+              : <>A receipt has opened in WhatsApp to send to our team. We'll call {placed.phone} when it's ready, you can also follow status on the Track Order page.</>}
           </p>
           <button
             className="rw-btn rw-btn-primary"
@@ -252,6 +298,8 @@ export default function OrderLaundry() {
             onClick={() => {
               setPlaced(null);
               setItems([]);
+              setExpressRequest(null);
+              setExDescription("");
               setFullName("");
               setPhone("");
               setEmail("");
@@ -341,31 +389,11 @@ export default function OrderLaundry() {
               {category === "express" && (
                 <div>
                   <div className="rw-field">
-                    <label>Express service</label>
-                    <select value={exItemId} onChange={(e) => setExItemId(e.target.value)}>
-                      {expressServices.map((i) => (
-                        <option key={i.id} value={i.id}>{i.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="rw-field">
-                    <label>Express turnaround</label>
-                    <div className="rw-pill-group">
-                      <button type="button" className={`rw-pill ${exTurnaround === "same-day" ? "active" : ""}`} onClick={() => setExTurnaround("same-day")}>Same day</button>
-                      <button type="button" className={`rw-pill ${exTurnaround === "next-day" ? "active" : ""}`} onClick={() => setExTurnaround("next-day")}>Next day</button>
-                    </div>
-                    <p style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>Express pricing is confirmed by our team via WhatsApp before any charge.</p>
-                  </div>
-                  <div className="rw-field">
-                    <label>Quantity</label>
-                    <div className="rw-stepper">
-                      <button onClick={() => setExQty((q) => Math.max(1, q - 1))}><Minus size={15} /></button>
-                      <span style={{ fontWeight: 700, minWidth: 40, textAlign: "center" }}>{exQty}</span>
-                      <button onClick={() => setExQty((q) => q + 1)}><Plus size={15} /></button>
-                    </div>
+                    <label>Describe the work you need</label>
+                    <textarea rows={3} placeholder="Describe the items and any special requests" value={exDescription} onChange={(e) => setExDescription(e.target.value)} />
                   </div>
                   <p style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 600, marginBottom: 14 }}>
-                    No price shown here, our team confirms your Express surcharge via WhatsApp before anything is charged.
+                    No preset price or quantity. Our team will confirm the price before payment.
                   </p>
                   <button className="rw-btn rw-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={addExpressLine}>
                     <Plus size={15} /> Add to order
