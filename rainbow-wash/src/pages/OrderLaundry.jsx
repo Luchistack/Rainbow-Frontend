@@ -29,7 +29,7 @@ const TURNAROUND = [
   { level: "Dry Cleaning", time: "48 hours" },
   { level: "Shoe & Leather Care", time: "48–72 hours" },
   { level: "Express Wash", time: "Same day" },
-  { level: "Next-Day Express", time: "48 hours" },
+  { level: "Next-Day Express", time: "Next day" },
 ];
 
 const CARE_TIPS = [
@@ -74,6 +74,8 @@ export default function OrderLaundry() {
   const [dcQty, setDcQty] = useState(1);
   const [exItemId, setExItemId] = useState(expressServices[0].id);
   const [exQty, setExQty] = useState(1);
+  const [exTurnaround, setExTurnaround] = useState("same-day");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [scItemId, setScItemId] = useState(shoeCareItems[0].id);
   const [scType, setScType] = useState("regular");
   const [scQty, setScQty] = useState(1);
@@ -148,7 +150,7 @@ export default function OrderLaundry() {
     // anything is charged, same as Home/Office/Deep Clean/Upholstery bookings.
     const item = expressServices.find((i) => String(i.id) === String(exItemId));
     if (!item) { notify("Prices are still loading, try again in a moment"); return; }
-    addItem(`${item.label} (Price via WhatsApp)`, exQty, 0, "");
+    addItem(`${item.label} (${exTurnaround === "same-day" ? "Same-day Express" : "Next-day Express"} — Price via WhatsApp)`, exQty, 0, "");
   };
 
   const addShoeCareLine = () => {
@@ -171,6 +173,7 @@ export default function OrderLaundry() {
   };
 
   const submit = async () => {
+    if (isSubmitting) return;
     if (items.length === 0) {
       notify("Add at least one item to your order first");
       return;
@@ -203,6 +206,7 @@ export default function OrderLaundry() {
       total, status: "Received",
     };
 
+    setIsSubmitting(true);
     let order = localOrder;
     try {
       const saved = await createOrder({
@@ -220,6 +224,8 @@ export default function OrderLaundry() {
     } catch (err) {
       notify(err?.message || "We couldn't save your order. Please try again.");
       return;
+    } finally {
+      setIsSubmitting(false);
     }
 
     setLaundryOrders((os) => [order, ...os]);
@@ -343,6 +349,14 @@ export default function OrderLaundry() {
                     </select>
                   </div>
                   <div className="rw-field">
+                    <label>Express turnaround</label>
+                    <div className="rw-pill-group">
+                      <button type="button" className={`rw-pill ${exTurnaround === "same-day" ? "active" : ""}`} onClick={() => setExTurnaround("same-day")}>Same day</button>
+                      <button type="button" className={`rw-pill ${exTurnaround === "next-day" ? "active" : ""}`} onClick={() => setExTurnaround("next-day")}>Next day</button>
+                    </div>
+                    <p style={{ fontSize: 12.5, color: "var(--ink-soft)" }}>Express pricing is confirmed by our team via WhatsApp before any charge.</p>
+                  </div>
+                  <div className="rw-field">
                     <label>Quantity</label>
                     <div className="rw-stepper">
                       <button onClick={() => setExQty((q) => Math.max(1, q - 1))}><Minus size={15} /></button>
@@ -441,7 +455,7 @@ export default function OrderLaundry() {
               <div className="rw-field">
                 <label>Pickup & delivery</label>
                 <div className="rw-pill-group">
-                  <button className={`rw-pill ${fulfilment === "pickup" ? "active" : ""}`} onClick={() => setFulfilment("pickup")}>
+                  <button type="button" className={`rw-pill ${fulfilment === "pickup" ? "active" : ""}`} onClick={() => { setFulfilment("pickup"); if (payment === "pos") setPayment("bank"); }}>
                     <Truck size={13} style={{ marginRight: 5, verticalAlign: -2 }} />Pickup & deliver (+{money(DELIVERY_FEE)})
                   </button>
                   <button className={`rw-pill ${fulfilment === "dropoff" ? "active" : ""}`} onClick={() => setFulfilment("dropoff")}>
@@ -472,8 +486,14 @@ export default function OrderLaundry() {
                 <div className="rw-pill-group">
                   {/* <button className={`rw-pill ${payment === "paystack" ? "active" : ""}`} onClick={() => setPayment("paystack")}>Paystack</button>
                   <button className={`rw-pill ${payment === "flutterwave" ? "active" : ""}`} onClick={() => setPayment("flutterwave")}>Flutterwave</button> */}
-                  <button className={`rw-pill ${payment === "bank" ? "active" : ""}`} onClick={() => setPayment("bank")}>Bank Transfer</button>
-                  <span className="rw-pill" aria-label="POS payment available for walk-in customers">POS (walk-in only)</span>
+                  <button type="button" className={`rw-pill ${payment === "bank" ? "active" : ""}`} onClick={() => setPayment("bank")}>Bank Transfer</button>
+                  <button
+                    type="button"
+                    className={`rw-pill ${payment === "pos" ? "active" : ""}`}
+                    disabled={fulfilment !== "dropoff"}
+                    onClick={() => setPayment("pos")}
+                    aria-label="Pay by POS in store"
+                  >POS (walk-in only)</button>
                 </div>
               </div>
 
@@ -541,8 +561,8 @@ export default function OrderLaundry() {
             <div className="rw-summary-row"><span>VAT ({VAT_RATE * 100}%)</span><span>{money(vat)}</span></div>
             <div className="rw-summary-row"><span>Delivery fee</span><span>{fulfilment === "pickup" ? money(deliveryFee) : "—"}</span></div>
             <div className="rw-summary-row total"><span>Total</span><span>{money(total)}</span></div>
-            <button className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} onClick={submit}>
-              <CreditCard size={16} /> Pay & Place Order
+            <button type="button" className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} onClick={submit} disabled={isSubmitting}>
+              <CreditCard size={16} /> {isSubmitting ? "Placing order..." : "Pay & Place Order"}
             </button>
             <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 10 }}>
               A receipt opens in WhatsApp automatically so our team gets notified right away.
