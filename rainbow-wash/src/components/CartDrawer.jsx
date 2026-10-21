@@ -3,7 +3,6 @@ import { X, Package, Minus, Plus, Trash2, CreditCard, User } from "lucide-react"
 import { useApp } from "../context/AppContext";
 import { money, genRef } from "../utils/format";
 import { buildWhatsAppLink, VAT_RATE } from "../data/constants";
-import { createShopOrder } from "../api/api";
 
 function buildReceipt(order) {
   const itemLines = order.items.map((i) => `  • ${i.name} × ${i.qty}, ${money(i.price * i.qty)}`).join("\n");
@@ -21,7 +20,7 @@ function buildReceipt(order) {
 }
 
 export default function CartDrawer({ open, onClose }) {
-  const { cart, setCart, setShopOrders, notify } = useApp();
+  const { cart, setCart, notify } = useApp();
   const [mode, setMode] = useState("delivery");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -35,7 +34,7 @@ export default function CartDrawer({ open, onClose }) {
   };
   const removeItem = (id) => setCart((c) => c.filter((i) => i.id !== id));
 
-  const checkout = async () => {
+  const checkout = () => {
     if (cart.length === 0) return;
     if (!fullName.trim()) {
       notify("Please add your full name");
@@ -49,28 +48,18 @@ export default function CartDrawer({ open, onClose }) {
     const localOrder = {
       id: genRef("SHOP"),
       items: cart.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
-      mode, fullName, phone, subtotal, tax, total,
+      mode,
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      subtotal, tax, total,
       placedAt: new Date().toISOString(),
       paymentStatus: "Pending",
       archived: false,
       status: "Received",
     };
 
-    let order = localOrder;
-    try {
-      const saved = await createShopOrder({
-        items: cart.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
-        fullName, phone, mode, total,
-      });
-      order = saved || localOrder;
-    } catch (err) {
-      notify(err?.message || "We couldn't save your order. Please try again.");
-      return;
-    }
-
-    setShopOrders((os) => [order, ...os]);
-    notify(`Order placed! Ref ${order.id}, ${mode === "delivery" ? "delivery" : "pickup"} selected.`);
-    window.open(buildWhatsAppLink(buildReceipt(order)), "_blank");
+    notify("Shop order request prepared. Send the WhatsApp message so our team can confirm it.");
+    window.open(buildWhatsAppLink(buildReceipt(localOrder)), "_blank");
     setCart([]);
     setFullName("");
     setPhone("");

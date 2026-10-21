@@ -1116,7 +1116,7 @@ export default function Admin() {
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "laundry" ? null : "laundry")}>
-                  {draftType === "laundry" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Order</>}
+                  {draftType === "laundry" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Laundry Order</>}
                 </button>
                 {canClearLists && todaysOrders.length > 0 && (
                   <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysOrders}>
@@ -1128,7 +1128,7 @@ export default function Admin() {
 
             {draftType === "laundry" && (
               <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
-                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Walk-In Laundry Order — Draft</h3>
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Laundry Order — Draft</h3>
                 <div className="rw-pill-group" style={{ marginBottom: 14 }}>
                   {["selfwash", "staffwash", "dryclean", "shoecare", "express", "shop"].map((c) => (
                     <button key={c} className={`rw-pill ${draftCategory === c ? "active" : ""}`} onClick={() => setDraftCategory(c)}>
@@ -1370,7 +1370,7 @@ export default function Admin() {
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "cleaning" ? null : "cleaning")}>
-                  {draftType === "cleaning" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Booking</>}
+                  {draftType === "cleaning" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Booking</>}
                 </button>
                 {canClearLists && todaysBookings.length > 0 && (
                   <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysBookings}>
@@ -1382,7 +1382,7 @@ export default function Admin() {
 
             {draftType === "cleaning" && (
               <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
-                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Walk-In Cleaning Booking — Draft</h3>
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Cleaning Booking — Draft</h3>
                 <div className="rw-form-grid" style={{ marginBottom: 12 }}>
                   <div>
                     <label>Service</label>
@@ -1473,7 +1473,7 @@ export default function Admin() {
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={() => openDraft(draftType === "shop" ? null : "shop")}>
-                  {draftType === "shop" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Walk-In Sale</>}
+                  {draftType === "shop" ? <><X size={14} /> Cancel</> : <><Plus size={14} /> New Shop Sale</>}
                 </button>
                 {canClearLists && todaysShopOrders.length > 0 && (
                   <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={clearTodaysShopOrders}>
@@ -1485,7 +1485,7 @@ export default function Admin() {
 
             {draftType === "shop" && (
               <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
-                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Walk-In Shop Sale — Draft</h3>
+                <h3 style={{ fontSize: 15, marginBottom: 12 }}>Shop Sale — Draft</h3>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
                   <div style={{ flex: "1 1 240px" }}>
                     <label>Product</label>

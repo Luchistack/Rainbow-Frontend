@@ -7,7 +7,6 @@ import FAQ from "../components/FAQ";
 import { buildWhatsAppLink, BANK_DETAILS } from "../data/constants";
 import { money, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
-import { createBooking } from "../api/api";
 
 
 const BOOKING_STEPS = [
@@ -88,7 +87,7 @@ function buildReceipt(booking) {
 }
 
 export default function BookCleaning() {
-  const { setBookings, notify, cleaningServices } = useApp();
+  const { notify, cleaningServices } = useApp();
 
   const servicesList = (cleaningServices && cleaningServices.length > 0) ? cleaningServices : FALLBACK_SERVICES;
   const [service, setService] = useState(servicesList[0]?.id);
@@ -122,7 +121,7 @@ export default function BookCleaning() {
     notify("Account number copied");
   };
 
-  const submit = async () => {
+  const submit = () => {
     if (!fullName.trim()) {
       notify("Please add your full name");
       return;
@@ -131,7 +130,7 @@ export default function BookCleaning() {
       notify("Please add a phone number so we can reach you");
       return;
     }
-    if (!email.trim() || !/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)*\.com$/i.test(email.trim())) {
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.com$/i.test(email.trim())) {
       notify("Please enter a valid email address ending in .com");
       return;
     }
@@ -144,32 +143,18 @@ export default function BookCleaning() {
       id: genRef("CLN"),
       service: svc.label,
       size: sizeObj?.label,
-      date, time, address, fullName, phone, email, price, payType, payable, express,
-      transferNote,
+      date, time, address, fullName: fullName.trim(),
+      phone: phone.trim(), email: email.trim(),
+      price, payType, payable, express, transferNote,
       paymentStatus: "Pending",
       placedAt: new Date().toISOString(),
       archived: false,
       status: "Pending Quote",
     };
 
-    setSubmitting(true);
-    let booking = localBooking;
-
-    try {
-      const saved = await createBooking(localBooking);
-      // Use the backend's real reference so the number on screen matches Postgres
-      booking = { ...localBooking, id: saved.referenceId || localBooking.id };
-    } catch (error) {
-      console.error("Failed to sync booking to backend:", error);
-      notify("We couldn't save your booking to our system, please still send the WhatsApp message and mention this so our team can confirm manually.");
-    } finally {
-      setSubmitting(false);
-    }
-
-    setBookings((bs) => [booking, ...bs]);
-    setPlaced(booking);
-    notify(`Booking ${booking.id} requested, we'll confirm your price on WhatsApp`);
-    window.open(buildWhatsAppLink(buildReceipt(booking)), "_blank");
+    setPlaced(localBooking);
+    notify("Cleaning request prepared. Send the WhatsApp message so our team can confirm the price and booking.");
+    window.open(buildWhatsAppLink(buildReceipt(localBooking)), "_blank");
   };
 
   if (placed) {
@@ -178,11 +163,8 @@ export default function BookCleaning() {
         <div className="rw-card" style={{ textAlign: "center", padding: 40 }}>
           <CheckCircle2 size={44} color="#39B54A" style={{ marginBottom: 12 }} />
           <h2>Booking requested!</h2>
-          <p style={{ color: "var(--ink-soft)", margin: "10px 0 4px" }}>Booking reference</p>
-          <div className="mono" style={{ fontSize: 23, fontWeight: 700, color: "var(--navy)" }}>{placed.id}</div>
           <p style={{ color: "var(--ink-soft)", marginTop: 14 }}>
-            A request has opened in WhatsApp, our team will confirm your exact price there, then arrive at{" "}
-            {placed.address || "the provided address"} on {placed.date || "the selected date"} once payment is sorted.
+            Your cleaning request details are ready in WhatsApp. Send the message so our team can confirm the price, availability, and next steps. Your booking is not confirmed until our team responds.
           </p>
           <button className="rw-btn rw-btn-primary" style={{ marginTop: 18 }} onClick={() => setPlaced(null)}>
             Book another

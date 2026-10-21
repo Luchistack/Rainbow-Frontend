@@ -11,7 +11,6 @@ import {
 } from "../data/constants";
 import { money, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
-import { createOrder, createExpressQuoteRequest } from "../api/api";
 
 const CATEGORIES = [
   { id: "selfwash", label: "Self Wash", icon: Shirt },
@@ -61,7 +60,7 @@ function buildReceipt(order) {
 }
 
 export default function OrderLaundry() {
-  const { setLaundryOrders, notify, selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, expressServices, products } = useApp();
+  const { notify, selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, expressServices, products } = useApp();
 
   const [category, setCategory] = useState("selfwash");
   const [items, setItems] = useState([]);
@@ -180,43 +179,43 @@ export default function OrderLaundry() {
     notify("Account number copied");
   };
 
-  const submit = async () => {
+  const submit = () => {
     if (isSubmitting) return;
+
     if (expressRequest) {
-      if (!fullName.trim()) { notify("Please add your full name"); return; }
-      if (!phone.trim()) { notify("Please add a phone number so we can contact you"); return; }
-      if (email.trim() && !/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)*\\.com$/i.test(email.trim())) {
+      if (!fullName.trim()) {
+        notify("Please add your full name");
+        return;
+      }
+      if (!phone.trim()) {
+        notify("Please add a phone number so we can contact you");
+        return;
+      }
+      if (email.trim() && !/^[^\s@]+@[^\s@]+\.com$/i.test(email.trim())) {
         notify("Please enter a valid email address ending in .com");
         return;
       }
-      setIsSubmitting(true);
-      try {
-        const saved = await createExpressQuoteRequest({
-          fullName: fullName.trim(),
-          phone: phone.trim(),
-          email: email.trim() || null,
-          service: expressRequest.service,
-          turnaround: expressRequest.turnaround,
-          description: expressRequest.description,
-        });
-        if (!saved || !(saved.id || saved.referenceId)) {
-          notify("We couldn't confirm that your Express request was saved. Please try again.");
-          return;
-        }
-        setPlaced({
-          ...saved,
-          isExpressQuote: true,
-          phone: phone.trim(),
-          fullName: fullName.trim(),
-        });
-        notify(`Express request ${saved.id} submitted. Price pending staff review.`);
-      } catch (err) {
-        notify(err?.message || "We couldn't save your Express request. Please try again.");
-      } finally {
-        setIsSubmitting(false);
-      }
+
+      const message = [
+        "⚡ New Express Quote Request, Rainbow Wash",
+        `Service: ${expressRequest.service}`,
+        `Turnaround: ${expressRequest.turnaround}`,
+        `Description: ${expressRequest.description}`,
+        `Customer name: ${fullName.trim()}`,
+        `Customer phone: ${phone.trim()}`,
+        `Customer email: ${email.trim() || "—"}`,
+        "Note: price to be confirmed by our team before payment.",
+      ].join("\n");
+
+      setPlaced({
+        isExpressQuote: true,
+        phone: phone.trim(),
+      });
+      notify("Express request prepared. Send the WhatsApp message so our team can confirm the price.");
+      window.open(buildWhatsAppLink(message), "_blank");
       return;
     }
+
     if (items.length === 0) {
       notify("Add at least one item to your order first");
       return;
@@ -229,7 +228,7 @@ export default function OrderLaundry() {
       notify("Please add a phone number so we can call you when it's ready");
       return;
     }
-    if (email.trim() && !/^[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])?)*\.com$/i.test(email.trim())) {
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.com$/i.test(email.trim())) {
       notify("Please enter a valid email address ending in .com");
       return;
     }
@@ -240,41 +239,23 @@ export default function OrderLaundry() {
 
     const localOrder = {
       id: genRef("LND"),
-      items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price, unit: i.unit })),
+      items: items.map((i) => ({
+        name: i.name, qty: i.qty, price: i.price, unit: i.unit
+      })),
       fulfilment, address, date, time, payment, transferNote,
       paymentStatus: payment === "bank" && transferSent ? "Received" : "Pending",
-      fullName, phone, email,
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      email: email.trim(),
       placedAt: new Date().toISOString(),
       archived: false,
-      total, status: "Received",
+      total,
+      status: "Received",
     };
 
-    setIsSubmitting(true);
-    let order = localOrder;
-    try {
-      const saved = await createOrder({
-        items: items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, price: i.price })),
-        fulfilment, address,
-        preferredDate: date, preferredTime: time,
-        paymentMethod: payment, transferNote,
-        total, fullName, phone, email,
-      });
-      if (!saved || !(saved.id || saved.referenceId)) {
-        notify("We couldn't confirm that your order was saved. Please try again.");
-        return;
-      }
-      order = saved;
-    } catch (err) {
-      notify(err?.message || "We couldn't save your order. Please try again.");
-      return;
-    } finally {
-      setIsSubmitting(false);
-    }
-
-    setLaundryOrders((os) => [order, ...os]);
-    setPlaced(order);
-    notify(`Order ${order.id} placed, ${money(total)} via ${payment}`);
-    window.open(buildWhatsAppLink(buildReceipt(order)), "_blank");
+    setPlaced(localOrder);
+    notify("Order request prepared. Send the WhatsApp message so our team can confirm your order.");
+    window.open(buildWhatsAppLink(buildReceipt(localOrder)), "_blank");
   };
 
   if (placed) {
@@ -282,15 +263,11 @@ export default function OrderLaundry() {
       <div className="rw-section" style={{ maxWidth: 560 }}>
         <div className="rw-card" style={{ textAlign: "center", padding: 40 }}>
           <CheckCircle2 size={44} color="#39B54A" style={{ marginBottom: 12 }} />
-          <h2>{placed.isExpressQuote ? "Express quote request received!" : "Order placed!"}</h2>
-          <p style={{ color: "var(--ink-soft)", margin: "10px 0 4px" }}>Your reference number</p>
-          <div className="mono" style={{ fontSize: 23, fontWeight: 700, color: "var(--navy)" }}>
-            {placed.id || placed.referenceId || "Pending"}
-          </div>
+          <h2>{placed.isExpressQuote ? "Express request ready!" : "Laundry request ready!"}</h2>
           <p style={{ color: "var(--ink-soft)", marginTop: 14 }}>
             {placed.isExpressQuote
-              ? `Your Express request has been saved. Our team will review the details and contact ${placed.phone} with a quote. No payment has been recorded.`
-              : <>A receipt has opened in WhatsApp to send to our team. We'll call {placed.phone} when it's ready, you can also follow status on the Track Order page.</>}
+              ? `Your Express request details are ready in WhatsApp. Send the message and our team will contact ${placed.phone} to confirm the price. No payment has been recorded.`
+              : <>Your order details are ready in WhatsApp. Send the message so our team can confirm your order and next steps with you.</>}
           </p>
           <button
             className="rw-btn rw-btn-primary"
@@ -388,6 +365,16 @@ export default function OrderLaundry() {
 
               {category === "express" && (
                 <div>
+                  <div className="rw-field">
+                    <label>Express turnaround</label>
+                    <select
+                      value={exTurnaround}
+                      onChange={(e) => setExTurnaround(e.target.value)}
+                    >
+                      <option value="same-day">Same-day Express</option>
+                      <option value="next-day">Next-day Express</option>
+                    </select>
+                  </div>
                   <div className="rw-field">
                     <label>Describe the work you need</label>
                     <textarea rows={3} placeholder="Describe the items and any special requests" value={exDescription} onChange={(e) => setExDescription(e.target.value)} />
@@ -590,10 +577,14 @@ export default function OrderLaundry() {
             <div className="rw-summary-row"><span>Delivery fee</span><span>{fulfilment === "pickup" ? money(deliveryFee) : "—"}</span></div>
             <div className="rw-summary-row total"><span>Total</span><span>{money(total)}</span></div>
             <button type="button" className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} onClick={submit} disabled={isSubmitting}>
-              <CreditCard size={16} /> {isSubmitting ? "Placing order..." : "Pay & Place Order"}
+              <CreditCard size={16} /> {isSubmitting
+              ? (expressRequest ? "Submitting quote request..." : "Placing order...")
+              : (expressRequest ? "Submit Express Quote Request" : "Place Order")}
             </button>
             <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 10 }}>
-              A receipt opens in WhatsApp automatically so our team gets notified right away.
+              {expressRequest
+              ? "Your request will be reviewed by our team. No payment is taken until your quote is confirmed."
+              : "A receipt opens in WhatsApp automatically so our team gets notified right away."}
             </p>
           </div>
         </div>
