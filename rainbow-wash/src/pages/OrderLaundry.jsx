@@ -7,7 +7,7 @@ import PageHeader from "../components/PageHeader";
 import FAQ from "../components/FAQ";
 import {
   ADDON_GROUPS,
-  DELIVERY_FEE, DELIVERY_COVERAGE_NOTE, BANK_DETAILS, buildWhatsAppLink, VAT_RATE,
+  DELIVERY_FEE, DELIVERY_COVERAGE_NOTE, buildWhatsAppLink, VAT_RATE,
 } from "../data/constants";
 import { money, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
@@ -51,7 +51,6 @@ function buildReceipt(order) {
     lines.push(`Preferred: ${order.date || "—"} ${order.time || ""}`.trim());
   }
   lines.push(`Payment method: ${order.payment}`);
-  if (order.payment === "bank" && order.transferNote) lines.push(`Transfer note: ${order.transferNote}`);
   lines.push(`Total: ${money(order.total)}`);
   lines.push(`Customer name: ${order.fullName}`);
   lines.push(`Customer phone: ${order.phone}`);
@@ -85,8 +84,6 @@ export default function OrderLaundry() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [payment, setPayment] = useState("bank");
-  const [transferNote, setTransferNote] = useState("");
-  const [transferSent, setTransferSent] = useState(false);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -174,11 +171,6 @@ export default function OrderLaundry() {
   const deliveryFee = fulfilment === "pickup" ? DELIVERY_FEE : 0;
   const total = subtotal + vat + deliveryFee;
 
-  const copyAccount = () => {
-    navigator.clipboard?.writeText(BANK_DETAILS.accountNumber);
-    notify("Account number copied");
-  };
-
   const submit = () => {
     if (isSubmitting) return;
 
@@ -242,8 +234,8 @@ export default function OrderLaundry() {
       items: items.map((i) => ({
         name: i.name, qty: i.qty, price: i.price, unit: i.unit
       })),
-      fulfilment, address, date, time, payment, transferNote,
-      paymentStatus: payment === "bank" && transferSent ? "Received" : "Pending",
+      fulfilment, address, date, time, payment,
+      paymentStatus: "Pending",
       fullName: fullName.trim(),
       phone: phone.trim(),
       email: email.trim(),
@@ -499,43 +491,53 @@ export default function OrderLaundry() {
               <div className="rw-field">
                 <label>Payment method</label>
                 <div className="rw-pill-group">
-                  {/* <button className={`rw-pill ${payment === "paystack" ? "active" : ""}`} onClick={() => setPayment("paystack")}>Paystack</button>
-                  <button className={`rw-pill ${payment === "flutterwave" ? "active" : ""}`} onClick={() => setPayment("flutterwave")}>Flutterwave</button> */}
-                  <button type="button" className={`rw-pill ${payment === "bank" ? "active" : ""}`} onClick={() => setPayment("bank")}>Bank Transfer</button>
+                  <button
+                    type="button"
+                    className={`rw-pill ${payment === "bank" ? "active" : ""}`}
+                    onClick={() => setPayment("bank")}
+                  >
+                    Bank Transfer
+                  </button>
                   <button
                     type="button"
                     className={`rw-pill ${payment === "pos" ? "active" : ""}`}
                     disabled={fulfilment !== "dropoff"}
                     onClick={() => setPayment("pos")}
-                    aria-label="Pay by POS in store"
-                  >POS (walk-in only)</button>
+                    aria-label="Pay by POS at the Rainbow Wash office"
+                  >
+                    POS
+                  </button>
                 </div>
               </div>
 
               {payment === "bank" && (
                 <div className="rw-summary" style={{ marginBottom: 16 }}>
-                  <h4 style={{ fontSize: 13.5, display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                    <Landmark size={15} /> Transfer to
+                  <h4 style={{ fontSize: 13.5, marginBottom: 8 }}>
+                    Bank Transfer Information
                   </h4>
-                  <div className="rw-summary-row"><span>Bank</span><span style={{ fontWeight: 700 }}>{BANK_DETAILS.bankName}</span></div>
-                  <div className="rw-summary-row">
-                    <span>Account Number</span>
-                    <span style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-                      {BANK_DETAILS.accountNumber}
-                      <button className="rw-icon-btn" onClick={copyAccount} title="Copy account number"><Copy size={13} /></button>
-                    </span>
-                  </div>
-                  <div className="rw-summary-row"><span>Account Name</span><span style={{ fontWeight: 700, textAlign: "right" }}>{BANK_DETAILS.accountName}</span></div>
-                  <div className="rw-field" style={{ marginTop: 12, marginBottom: 10 }}>
-                    <label style={{ fontSize: 12.5 }}>Transfer note (optional)</label>
-                    <textarea rows={2} placeholder="e.g. Sent from GTBank, ref 123456" value={transferNote} onChange={(e) => setTransferNote(e.target.value)} />
-                  </div>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
-                    <input type="checkbox" checked={transferSent} onChange={(e) => setTransferSent(e.target.checked)} style={{ width: "auto" }} />
-                    I've already made this transfer
-                  </label>
+                  <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6 }}>
+                    Your order and final price must be confirmed by the Rainbow
+                    Wash team before payment. Our bank account details will be
+                    sent to you through WhatsApp after confirmation.
+                  </p>
                   <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 8 }}>
-                    Your order stays marked "Payment Pending" until our team confirms the transfer, we'll message you once it's confirmed.
+                    Please wait for our confirmation before making any transfer.
+                  </p>
+                </div>
+              )}
+
+              {payment === "pos" && (
+                <div className="rw-summary" style={{ marginBottom: 16 }}>
+                  <h4 style={{ fontSize: 13.5, marginBottom: 8 }}>
+                    POS Payment Information
+                  </h4>
+                  <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6 }}>
+                    Your order and final price must be confirmed by the Rainbow
+                    Wash team before payment. You can pay using our POS terminal
+                    at the Rainbow Wash office after confirmation.
+                  </p>
+                  <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: 8 }}>
+                    Please wait for our confirmation before making any payment.
                   </p>
                 </div>
               )}
