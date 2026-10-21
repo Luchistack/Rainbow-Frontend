@@ -255,11 +255,11 @@ export default function OrderLaundry() {
       <div className="rw-section" style={{ maxWidth: 560 }}>
         <div className="rw-card" style={{ textAlign: "center", padding: 40 }}>
           <CheckCircle2 size={44} color="#39B54A" style={{ marginBottom: 12 }} />
-          <h2>{placed.isExpressQuote ? "Express request ready!" : "Laundry request ready!"}</h2>
+          <h2>{placed.isExpressQuote ? "Express request sent!" : "Laundry request sent!"}</h2>
           <p style={{ color: "var(--ink-soft)", marginTop: 14 }}>
             {placed.isExpressQuote
-              ? `Your Express request details are ready in WhatsApp. Send the message and our team will contact ${placed.phone} to confirm the price. No payment has been recorded.`
-              : <>Your order details are ready in WhatsApp. Send the message so our team can confirm your order and next steps with you.</>}
+              ? `Your Express request details are prepared in WhatsApp. Please send the message so our team receives your request and can contact ${placed.phone} to confirm the price. No payment has been recorded.`
+              : <>Your order details are prepared in WhatsApp. Please send the message so our team receives your request and can contact you to confirm your order. Your tracking number will be sent after our team registers the order in the dashboard.</>}
           </p>
           <button
             className="rw-btn rw-btn-primary"

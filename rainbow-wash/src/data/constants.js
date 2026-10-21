@@ -154,7 +154,7 @@ export const PRODUCTS = [
 
 export const TRACK_STAGES = ["Received", "Washing", "Completed", "Delivered"];
 export const PAYMENT_STATUSES = ["Pending", "Received", "Confirmed"];
-export const PAYMENT_METHODS = ["Transfer", "Card"];
+export const PAYMENT_METHODS = ["Transfer", "Card", "POS"];
 
 // Order/booking receipts send straight to this WhatsApp number as a copy for staff.
 export const WHATSAPP_NUMBER = "2349165896730"; // ⚠️ double-check this — it's 12 digits, one short of the usual 13 (234 + 10-digit local number)

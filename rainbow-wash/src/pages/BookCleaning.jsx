@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Wallet, Phone, Mail, User, MessageCircle, Landmark, Copy, Zap } from "lucide-react";
+import { CheckCircle2, Wallet, Phone, Mail, User, MessageCircle, Zap } from "lucide-react";
 import PageHeader from "../components/PageHeader";
 import Steps from "../components/Steps";
 import Testimonials from "../components/Testimonials";
 import FAQ from "../components/FAQ";
-import { buildWhatsAppLink, BANK_DETAILS } from "../data/constants";
-import { money, genRef } from "../utils/format";
+import { buildWhatsAppLink } from "../data/constants";
+import { genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
 
 
@@ -75,9 +75,8 @@ function buildReceipt(booking) {
     `Size: ${booking.size}`,
     `Date: ${booking.date || "—"} ${booking.time || ""}`.trim(),
     `Address: ${booking.address || "—"}`,
-    `Requested payment split: ${booking.payType === "deposit" ? "70% deposit now, balance on completion" : "Full payment"}`,
+    `Payment method: ${booking.paymentMethod || "To be confirmed"}`,
     ];
-  if (booking.transferNote) lines.push(`Transfer note: ${booking.transferNote}`);
   if (booking.express) lines.push(`Express (same-day) requested: Yes`);
   lines.push(`Customer name: ${booking.fullName}`);
   lines.push(`Customer phone: ${booking.phone}`);
@@ -96,9 +95,8 @@ export default function BookCleaning() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [address, setAddress] = useState("");
-  const [payType, setPayType] = useState("deposit");
+  const [payment, setPayment] = useState("bank");
   const [express, setExpress] = useState(false);
-  const [transferNote, setTransferNote] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -113,14 +111,6 @@ export default function BookCleaning() {
 
   const sizeObj = svc?.sizes?.find((s) => s.id === size) || svc?.sizes?.[0];
   const price = sizeObj?.price || 0;
-  const deposit = Math.round(price * 0.3);
-  const payable = payType === "deposit" ? deposit : price;
-
-  const copyAccount = () => {
-    navigator.clipboard?.writeText(BANK_DETAILS.accountNumber);
-    notify("Account number copied");
-  };
-
   const submit = () => {
     if (!fullName.trim()) {
       notify("Please add your full name");
@@ -145,7 +135,9 @@ export default function BookCleaning() {
       size: sizeObj?.label,
       date, time, address, fullName: fullName.trim(),
       phone: phone.trim(), email: email.trim(),
-      price, payType, payable, express, transferNote,
+      price, payType: "full", payable: price,
+      paymentMethod: payment === "bank" ? "Transfer" : "POS",
+      express,
       paymentStatus: "Pending",
       placedAt: new Date().toISOString(),
       archived: false,
@@ -162,9 +154,9 @@ export default function BookCleaning() {
       <div className="rw-section" style={{ maxWidth: 560 }}>
         <div className="rw-card" style={{ textAlign: "center", padding: 40 }}>
           <CheckCircle2 size={44} color="#39B54A" style={{ marginBottom: 12 }} />
-          <h2>Booking requested!</h2>
+          <h2>Booking request sent!</h2>
           <p style={{ color: "var(--ink-soft)", marginTop: 14 }}>
-            Your cleaning request details are ready in WhatsApp. Send the message so our team can confirm the price, availability, and next steps. Your booking is not confirmed until our team responds.
+            Your booking details are prepared in WhatsApp. Please send the message so our team receives your request and can contact you to confirm the price and availability. Your tracking number will be sent after our team registers the booking in the dashboard. Your booking is not confirmed until our team responds.
           </p>
           <button className="rw-btn rw-btn-primary" style={{ marginTop: 18 }} onClick={() => setPlaced(null)}>
             Book another
@@ -213,10 +205,10 @@ export default function BookCleaning() {
               <input required placeholder="Full address for our team" value={address} onChange={(e) => setAddress(e.target.value)} />
             </div>
             <div className="rw-field">
-              <label>Preferred payment split</label>
+              <label>Payment method</label>
               <div className="rw-pill-group">
-                <button className={`rw-pill ${payType === "deposit" ? "active" : ""}`} onClick={() => setPayType("deposit")}>70% deposit</button>
-                <button className={`rw-pill ${payType === "full" ? "active" : ""}`} onClick={() => setPayType("full")}>Pay in full</button>
+                <button type="button" className={`rw-pill ${payment === "bank" ? "active" : ""}`} onClick={() => setPayment("bank")}>Bank Transfer</button>
+                <button type="button" className={`rw-pill ${payment === "pos" ? "active" : ""}`} onClick={() => setPayment("pos")}>POS</button>
               </div>
             </div>
 
@@ -233,24 +225,21 @@ export default function BookCleaning() {
               )}
             </div>
 
-            <div className="rw-summary" style={{ marginBottom: 16 }}>
-              <h4 style={{ fontSize: 13.5, display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                <Landmark size={15} /> If paying by bank transfer
-              </h4>
-              <div className="rw-summary-row"><span>Bank</span><span style={{ fontWeight: 700 }}>{BANK_DETAILS.bankName}</span></div>
-              <div className="rw-summary-row">
-                <span>Account Number</span>
-                <span style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-                  {BANK_DETAILS.accountNumber}
-                  <button className="rw-icon-btn" onClick={copyAccount} title="Copy account number"><Copy size={13} /></button>
-                </span>
+            {payment === "bank" ? (
+              <div className="rw-summary" style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: 13.5, marginBottom: 8 }}>Bank Transfer</h4>
+                <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6 }}>
+                  Our team will confirm the booking and price first. Bank account details will be provided through WhatsApp after confirmation. Please wait for the team's instructions before making a transfer.
+                </p>
               </div>
-              <div className="rw-summary-row"><span>Account Name</span><span style={{ fontWeight: 700, textAlign: "right" }}>{BANK_DETAILS.accountName}</span></div>
-              <div className="rw-field" style={{ marginTop: 12, marginBottom: 0 }}>
-                <label style={{ fontSize: 12.5 }}>Note for our team (optional)</label>
-                <textarea rows={2} placeholder="Any detail so we can confirm your payment" value={transferNote} onChange={(e) => setTransferNote(e.target.value)} />
+            ) : (
+              <div className="rw-summary" style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: 13.5, marginBottom: 8 }}>POS</h4>
+                <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6 }}>
+                  Select POS if you prefer to pay by POS. Our team will confirm the payment arrangements with you after reviewing your booking.
+                </p>
               </div>
-            </div>
+            )}
 
             <div className="rw-field">
               <label><User size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Full name</label>
@@ -269,7 +258,7 @@ export default function BookCleaning() {
           <div className="rw-card rw-summary" style={{ position: "sticky", top: 90 }}>
             <h3 style={{ marginBottom: 14 }}>Booking summary</h3>
             <div className="rw-summary-row"><span>Service</span><span>{svc?.label}</span></div>
-           <div className="rw-summary-row"><span>Payment split</span><span>{payType === "deposit" ? "70% deposit" : "Full payment"}</span></div>
+           <div className="rw-summary-row"><span>Payment method</span><span>{payment === "bank" ? "Bank Transfer" : "POS"}</span></div>
             {express && <div className="rw-summary-row"><span>Turnaround</span><span style={{ fontWeight: 700, color: "var(--blue)" }}>Express (same-day)</span></div>}
             <div style={{ background: "var(--ice)", borderRadius: 12, padding: 14, marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
               <MessageCircle size={18} color="var(--blue)" style={{ flexShrink: 0, marginTop: 2 }} />
