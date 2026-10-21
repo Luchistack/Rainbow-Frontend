@@ -154,9 +154,9 @@ export default function BookCleaning() {
       <div className="rw-section" style={{ maxWidth: 560 }}>
         <div className="rw-card" style={{ textAlign: "center", padding: 40 }}>
           <CheckCircle2 size={44} color="#39B54A" style={{ marginBottom: 12 }} />
-          <h2>Booking request sent!</h2>
+          <h2>Booking Request Received!</h2>
           <p style={{ color: "var(--ink-soft)", marginTop: 14 }}>
-            Your booking details are prepared in WhatsApp. Please send the message so our team receives your request and can contact you to confirm the price and availability. Your tracking number will be sent after our team registers the booking in the dashboard. Your booking is not confirmed until our team responds.
+            We have received your booking details. Our team will contact you shortly to confirm price, availability, and provide your tracking number. Your order is pending final confirmation.
           </p>
           <button className="rw-btn rw-btn-primary" style={{ marginTop: 18 }} onClick={() => setPlaced(null)}>
             Book another
