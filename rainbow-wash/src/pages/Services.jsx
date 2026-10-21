@@ -69,7 +69,7 @@ export default function Services() {
         <div className="rw-section-head">
           <div className="rw-kicker">Laundry pricing</div>
           <h2>Self Wash & Staff Wash, per kg</h2>
-          <p>Self Wash: you use the machines. Staff Wash: we do it for you. 5% off any Self Wash line of 5kg or more.</p>
+          <p>Self Wash: you use the machines. Staff Wash: we do it for you.</p>
         </div>
         <div className="rw-grid-2">
           <div className="rw-card">
