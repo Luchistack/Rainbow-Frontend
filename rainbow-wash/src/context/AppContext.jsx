@@ -188,7 +188,12 @@ export function AppProvider({ children }) {
   const refreshServices = async () => {
     try {
       const data = await fetchCleaningServices(); // hits GET /api/services — the whole flat catalog
-      if (data) setAllServices(data);
+      if (Array.isArray(data) && data.length > 0) {
+        setAllServices(data);
+      } else if (Array.isArray(data) && data.length === 0) {
+        // An empty backend catalog must not erase the default pricing catalog.
+        setAllServices(buildFallbackServices());
+      }
       return true;
     } catch (error) {
       return false;

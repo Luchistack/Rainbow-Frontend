@@ -40,31 +40,24 @@ const BOOK_FAQ = [
 
 // Fallback cleaning options in case API/Context hasn't fetched them yet
 const FALLBACK_SERVICES = [
-  {
-    id: "home",
-    label: "Home Cleaning",
-    sizes: [
-      { id: "1bed", label: "1 - 2 Bedrooms", price: 15000 },
-      { id: "3bed", label: "3 - 4 Bedrooms", price: 25000 },
-      { id: "mansion", label: "5+ Bedrooms / Duplex", price: 40000 },
-    ]
-  },
-  {
-    id: "office",
-    label: "Office Cleaning",
-    sizes: [
-      { id: "small", label: "Small Office / Workspace", price: 20000 },
-      { id: "large", label: "Large Office Suite", price: 45000 },
-    ]
-  },
-  {
-    id: "deep",
-    label: "Deep Clean",
-    sizes: [
-      { id: "standard", label: "Standard Deep Clean", price: 35000 },
-      { id: "heavy", label: "Heavy Duty / Post-Construction", price: 60000 },
-    ]
-  }
+  { id: "home", label: "Home Cleaning", sizes: [
+    { id: "1bed", label: "1 - 2 Bedrooms" },
+    { id: "3bed", label: "3 - 4 Bedrooms" },
+    { id: "mansion", label: "5+ Bedrooms / Duplex" },
+  ]},
+  { id: "office", label: "Office Cleaning", sizes: [
+    { id: "small", label: "Small Office / Workspace" },
+    { id: "large", label: "Large Office Suite" },
+  ]},
+  { id: "deep", label: "Deep Cleaning", sizes: [
+    { id: "standard", label: "Standard Deep Clean" },
+    { id: "heavy", label: "Heavy Duty / Post-Construction" },
+  ]},
+  { id: "upholstery", label: "Upholstery Cleaning", sizes: [
+    { id: "single", label: "Single item (chair/mattress)" },
+    { id: "sofa", label: "3-seater sofa" },
+    { id: "fullset", label: "Full living room set" },
+  ]},
 ];
 
 function buildReceipt(booking) {
@@ -110,7 +103,8 @@ export default function BookCleaning() {
   }, [service, svc]);
 
   const sizeObj = svc?.sizes?.find((s) => s.id === size) || svc?.sizes?.[0];
-  const price = sizeObj?.price || 0;
+  // Cleaning prices are quoted by staff; no preset customer price is applied.
+  const price = 0;
   const submit = () => {
     if (!fullName.trim()) {
       notify("Please add your full name");
@@ -135,7 +129,7 @@ export default function BookCleaning() {
       size: sizeObj?.label,
       date, time, address, fullName: fullName.trim(),
       phone: phone.trim(), email: email.trim(),
-      price, payType: "full", payable: price,
+      price: 0, payType: "full", payable: 0,
       paymentMethod: payment === "bank" ? "Transfer" : "POS",
       express,
       paymentStatus: "Pending",

@@ -86,9 +86,9 @@ export const ADDON_PRODUCTS = [
 // per-item/per-load surcharge), covering Laundry, Upholstery and Cleaning.
 // Fully editable by Manager/Admin in the Pricing tab, same as everything else.
 export const EXPRESS_SERVICES = [
-  { id: "ex-laundry", label: "Express Laundry (same-day)", price: 2000 },
-  { id: "ex-upholstery", label: "Express Upholstery (same-day)", price: 5000 },
-  { id: "ex-cleaning", label: "Express Cleaning (same-day)", price: 5000 },
+  { id: "ex-laundry", label: "Express Laundry (same-day)" },
+  { id: "ex-upholstery", label: "Express Upholstery (same-day)" },
+  { id: "ex-cleaning", label: "Express Cleaning (same-day)" },
 ];
 
 // Home/Office/Deep Clean/Upholstery — internal reference prices only.
@@ -100,36 +100,36 @@ export const CLEANING_SERVICES = [
     id: "home",
     label: "Home Cleaning",
     sizes: [
-      { id: "studio", label: "Studio / 1 Bed", price: 12000 },
-      { id: "2bed", label: "2–3 Bedroom", price: 20000 },
-      { id: "duplex", label: "Duplex / 4+ Bed", price: 32000 },
+      { id: "studio", label: "Studio / 1 Bed" },
+      { id: "2bed", label: "2–3 Bedroom" },
+      { id: "duplex", label: "Duplex / 4+ Bed" },
     ],
   },
   {
     id: "office",
     label: "Office Cleaning",
     sizes: [
-      { id: "small", label: "Small office", price: 15000 },
-      { id: "medium", label: "Medium office", price: 28000 },
-      { id: "large", label: "Large office / floor", price: 45000 },
+      { id: "small", label: "Small office" },
+      { id: "medium", label: "Medium office" },
+      { id: "large", label: "Large office / floor" },
     ],
   },
   {
     id: "deep",
     label: "Deep Cleaning",
     sizes: [
-      { id: "studio", label: "Studio / 1 Bed", price: 22000 },
-      { id: "2bed", label: "2–3 Bedroom", price: 36000 },
-      { id: "duplex", label: "Duplex / 4+ Bed", price: 55000 },
+      { id: "studio", label: "Studio / 1 Bed" },
+      { id: "2bed", label: "2–3 Bedroom" },
+      { id: "duplex", label: "Duplex / 4+ Bed" },
     ],
   },
   {
     id: "upholstery",
     label: "Upholstery Cleaning",
     sizes: [
-      { id: "single", label: "Single item (chair/mattress)", price: 8000 },
-      { id: "sofa", label: "3-seater sofa", price: 16000 },
-      { id: "fullset", label: "Full living room set", price: 30000 },
+      { id: "single", label: "Single item (chair/mattress)" },
+      { id: "sofa", label: "3-seater sofa" },
+      { id: "fullset", label: "Full living room set" },
     ],
   },
 ];

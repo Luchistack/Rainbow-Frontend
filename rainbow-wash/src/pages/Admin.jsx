@@ -842,13 +842,9 @@ export default function Admin() {
   const addDraftExpressLine = () => {
     const item = expressServices.find((i) => String(i.id) === String(draftExItemId));
     if (!item) { notify("Express services are still loading, try again"); return; }
-    if (draftExPrice.trim() === "" || !Number.isFinite(Number(draftExPrice)) || Number(draftExPrice) <= 0) {
-      notify("Enter the price for this Express service");
-      return;
-    }
     const turnaround = draftExTurnaround === "same-day" ? "Same day Express" : "Next day Express";
-    addDraftItem(`${item.label} (${turnaround})`, Math.max(1, Number(draftExQty) || 1), Number(draftExPrice), "");
-    setDraftExPrice("");
+    addDraftItem(`${item.label} (${turnaround} — Quote required)`, Math.max(1, Number(draftExQty) || 1), 0, "");
+    notify("Express quote required. Confirm the price with the customer before collecting payment.");
   };
   // Combines the real Shop inventory with the Pricing tab's add-on catalog —
   // from a walk-in customer's point of view these are all just "things we can
@@ -1229,9 +1225,10 @@ export default function Admin() {
                         <option value="next-day">Next day</option>
                       </select>
                     </div>
-                    <div style={{ flex: "1 1 150px" }}>
-                      <label>Price (₦)</label>
-                      <input type="number" min="1" step="0.01" value={draftExPrice} onChange={(e) => setDraftExPrice(e.target.value)} placeholder="Enter price" />
+                    <div style={{ flex: "1 1 220px" }}>
+                      <p style={{ fontSize: 12.5, color: "var(--ink-soft)", margin: "0 0 8px" }}>
+                        Price is confirmed by staff before payment.
+                      </p>
                     </div>
                     <div>
                       <label>Qty</label>
@@ -1858,24 +1855,14 @@ export default function Admin() {
             </table>
 
             <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Zap size={15} /> Express Services</h3>
-            <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -4, marginBottom: 10 }}>Covers Laundry, Upholstery and Cleaning — shown as its own category on Order Laundry.</p>
-            <table className="rw-table" style={{ marginBottom: 10 }}>
-              <thead><tr><th>Service Name</th><th>Price (₦)</th><th></th></tr></thead>
-              <tbody>
-                {expressServices.map((r) => (
-                  <tr key={r.id} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) savePricingItem(r, "Express", ["label", "price"]); }}>
-                    <td><input style={{ width: "100%", padding: "6px 8px" }} value={pricingValue(r, "label", "Express")} onChange={(e) => updateExpress(r.id, "label", e.target.value)} /></td>
-                    <td><input type="text" inputMode="decimal" step="100" style={{ width: 120, padding: "6px 8px" }} value={pricingValue(r, "price", "Express")} onChange={(e) => updateExpress(r.id, "price", e.target.value)} /></td>
-                    <td><button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => deleteExpress(r.id)}><Trash2 size={13} color="#e0473f" /></button></td>
-                  </tr>
-                ))}
-                <tr>
-                  <td><input placeholder="e.g. Express Duvet" style={{ width: "100%", padding: "6px 8px" }} value={newExpress.label} onChange={(e) => setNewExpress((s) => ({ ...s, label: e.target.value }))} /></td>
-                  <td><input type="text" inputMode="decimal" placeholder="Price" style={{ width: 120, padding: "6px 8px" }} value={newExpress.price} onChange={(e) => setNewExpress((s) => ({ ...s, price: e.target.value }))} /></td>
-                  <td><button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addExpress}><Plus size={13} /></button></td>
-                </tr>
-              </tbody>
-            </table>
+            <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -4, marginBottom: 10 }}>
+              Express prices are quoted individually. Confirm the customer's quote before payment.
+            </p>
+            <ul style={{ margin: "0 0 10px", paddingLeft: 22 }}>
+              {expressServices.map((r) => (
+                <li key={r.id} style={{ marginBottom: 6 }}>{r.label}</li>
+              ))}
+            </ul>
 
             <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8 }}>Shop & Add-on Products</h3>
             <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -4, marginBottom: 10 }}>Grouped by category — Detergents, Starch, Bleach, Nylon, Bags, Extras.</p>
