@@ -50,7 +50,7 @@ function buildReceipt(order) {
     lines.push(`Address: ${order.address || "—"}`);
     lines.push(`Preferred: ${order.date || "—"} ${order.time || ""}`.trim());
   }
-  lines.push(`Payment method: ${order.payment}`);
+  lines.push(`Payment method: ${order.payment === "bank" ? "Bank Transfer" : order.payment === "pos" ? "POS" : order.payment}`);
   lines.push(`Total: ${money(order.total)}`);
   lines.push(`Customer name: ${order.fullName}`);
   lines.push(`Customer phone: ${order.phone}`);
@@ -312,9 +312,9 @@ export default function OrderLaundry() {
                   <div className="rw-field">
                     <label>Weight (kg)</label>
                     <div className="rw-stepper">
-                      <button type="button" aria-label="Decrease weight" onClick={() => setWashWeight((w) => Math.max(1, Number(w || 1) - 1))}><Minus size={15} /></button>
+                      <button type="button" aria-label="Decrease weight" onClick={() => setWashWeight((w) => Math.max(1, Math.round(((Number(w) || 1) - 0.5) * 2) / 2))}><Minus size={15} /></button>
                       <span style={{ fontWeight: 700, minWidth: 40, textAlign: "center" }}>{Math.max(1, Number(washWeight) || 1)} kg</span>
-                      <button type="button" aria-label="Increase weight" onClick={() => setWashWeight((w) => Math.min(100, (Number(w) || 1) + 1))}><Plus size={15} /></button>
+                      <button type="button" aria-label="Increase weight" onClick={() => setWashWeight((w) => Math.min(100, Math.round(((Number(w) || 1) + 0.5) * 2) / 2))}><Plus size={15} /></button>
                     </div>
 
                   </div>
