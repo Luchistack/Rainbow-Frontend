@@ -45,7 +45,11 @@ function buildShareText(order) {
   const placedDate = order.placedAt ? new Date(order.placedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
   const lines = [
-    `Rainbow Wash — Receipt ${order.id}`,
+    BUSINESS_INFO.name,
+    ...BUSINESS_INFO.phones,
+    BUSINESS_INFO.email,
+    "",
+    `Receipt: ${order.id}`,
     `Date: ${placedDate}`,
     `Customer: ${order.fullName || "Customer"}${order.phone ? " (" + order.phone + ")" : ""}`,
     "",
@@ -66,13 +70,11 @@ function buildShareText(order) {
 
 const PRINT_SIZE_CSS = {
   a4: `
-    @page { size: A4; margin: 14mm; }
     body.size-a4 { max-width: 700px; font-size: 13.5px; }
     body.size-a4 .biz { font-size: 18px; }
     body.size-a4 h1 { font-size: 24px; }
   `,
   thermal80: `
-    @page { size: 80mm auto; margin: 4mm; }
     body.size-thermal80 { max-width: 72mm; font-size: 11px; padding: 6px; }
     body.size-thermal80 .biz { font-size: 14px; }
     body.size-thermal80 h1 { font-size: 15px; margin: 10px 0 4px; }
@@ -81,7 +83,6 @@ const PRINT_SIZE_CSS = {
     body.size-thermal80 .print-rainbow-stripe { height: 4px; margin-bottom: 12px; }
   `,
   thermal58: `
-    @page { size: 58mm auto; margin: 3mm; }
     body.size-thermal58 { max-width: 52mm; font-size: 9.5px; padding: 4px; }
     body.size-thermal58 .biz { font-size: 12px; }
     body.size-thermal58 .contact { font-size: 9px; }
@@ -156,6 +157,7 @@ export function openPrintSlip(order, staffUser, onPrinted) {
 <meta charset="utf-8" />
 <title>${order.id} — Rainbow Wash</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style id="receipt-page-size">@page { size: A4; margin: 14mm; }</style>
 <style>
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -176,9 +178,9 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   .print-rainbow-stripe { height: 6px; width: 100%; display: flex; margin-bottom: 24px; border-radius: 4px; overflow: hidden; }
   .print-rainbow-stripe span { flex: 1; }
 
-  .head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-  .biz { font-weight: 800; font-size: 18px; color: #0c3f66; }
-  .contact { text-align: right; font-size: 12px; color: #555; line-height: 1.6; }
+  .head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 20px; min-width: 0; }
+  .biz { font-weight: 800; font-size: 18px; color: #0c3f66; max-width: 100%; overflow-wrap: anywhere; line-height: 1.3; }
+  .contact { text-align: left; font-size: 12px; color: #555; line-height: 1.6; overflow-wrap: anywhere; max-width: 100%; }
 
   h1 { font-size: 24px; margin: 18px 0 4px; color: #0c3f66; }
 
@@ -271,8 +273,18 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   <script>
     var PDF_DATA = ${JSON.stringify(pdfData)};
 
+    var selectedPdfSize = 'a4';
+
     function setSizeAndPrint(size) {
-      document.body.className = 'size-' + size;
+      selectedPdfSize = ['a4', 'thermal80', 'thermal58'].indexOf(size) !== -1 ? size : 'a4';
+      document.body.className = 'size-' + selectedPdfSize;
+      var pageStyle = document.getElementById('receipt-page-size');
+      var pageSettings = {
+        a4: 'size: A4; margin: 14mm;',
+        thermal80: 'size: 80mm auto; margin: 4mm;',
+        thermal58: 'size: 58mm auto; margin: 3mm;'
+      };
+      if (pageStyle) pageStyle.textContent = '@page { ' + (pageSettings[size] || pageSettings.a4) + ' }';
       window.print();
       notifyPrinted();
     }
@@ -286,129 +298,305 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     function buildPdf() {
       var d = PDF_DATA;
       var jsPDFCtor = window.jspdf.jsPDF;
-      var doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
-      var pageW = 595, left = 40, right = 555, contentW = right - left;
-      var rainbow = [[239,65,54],[247,148,29],[255,206,51],[57,181,74],[39,170,225],[142,68,173]];
-      var accentBlue = [39, 170, 225];
-      var y = 0;
+      var bodyClass = document.body.className || '';
+      var activeSize = selectedPdfSize ||
+        (bodyClass.indexOf('size-thermal80') !== -1 ? 'thermal80' :
+         bodyClass.indexOf('size-thermal58') !== -1 ? 'thermal58' : 'a4');
+      var is80 = activeSize === 'thermal80';
+      var is58 = activeSize === 'thermal58';
+      var isThermal = is80 || is58;
 
-      // Rainbow stripe across the very top of the page
+      // jsPDF custom formats are expressed in points.
+      var mmToPt = 72 / 25.4;
+      var pageW = is80 ? 80 * mmToPt : is58 ? 58 * mmToPt : 595.28;
+      var left = isThermal ? (is80 ? 8 : 6) : 40;
+      var right = pageW - left;
+      var contentW = right - left;
+      var small = isThermal;
+      var rainbow = [
+        [239,65,54], [247,148,29], [255,206,51],
+        [57,181,74], [39,170,225], [142,68,173]
+      ];
+      var accentBlue = [39, 170, 225];
+      var marginBottom = small ? 18 : 40;
+
+      // Estimate a long-roll page height before creating the PDF.
+      // The width remains the actual selected thermal-paper width.
+      var estimatedH = 0;
+      if (isThermal) {
+        estimatedH = 260;
+        estimatedH += String(d.bizName || '').length * (is80 ? 5 : 6);
+        estimatedH += String(d.contactLine || '').length * 3;
+        estimatedH += String(d.email || '').length * 3;
+        estimatedH += String(d.billTo || '').length * 3;
+        estimatedH += String(d.ref || '').length * 2;
+        estimatedH += String(d.status || '').length * 2;
+        estimatedH += String(d.paymentMethod || '').length * 2;
+        estimatedH += String(d.paymentStatus || '').length * 2;
+        (d.items || []).forEach(function (r) {
+          estimatedH += 48 + Math.ceil(String(r.desc || '').length / (is80 ? 25 : 16)) * 12;
+        });
+        estimatedH += (d.other ? 120 : 100);
+        estimatedH = Math.max(estimatedH, 420);
+      }
+
+      var doc = isThermal
+        ? new jsPDFCtor({
+            unit: 'pt',
+            format: [pageW, estimatedH],
+            compress: true
+          })
+        : new jsPDFCtor({ unit: 'pt', format: 'a4' });
+
+      // Use the real page dimensions supplied by jsPDF.
+      pageW = doc.internal.pageSize.getWidth();
+      right = pageW - left;
+      contentW = right - left;
+
+      var y = 0;
+      var fontBody = is58 ? 7.5 : is80 ? 8.5 : 9.5;
+      var fontSmall = is58 ? 6.5 : is80 ? 7.5 : 9;
+      var lineGap = is58 ? 9 : is80 ? 10 : 12;
+
+      // Rainbow stripe across the page.
       var stripeW = pageW / rainbow.length;
       rainbow.forEach(function (rgb, i) {
         doc.setFillColor(rgb[0], rgb[1], rgb[2]);
-        doc.rect(i * stripeW, 0, stripeW + 1, 6, 'F');
+        doc.rect(i * stripeW, 0, stripeW + 1, 5, 'F');
       });
 
-      y = 42;
-      doc.setFontSize(16); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
-      doc.text(d.bizName, left, y, { maxWidth: 300 });
-      doc.setFontSize(9); doc.setTextColor(85, 85, 85); doc.setFont(undefined, 'normal');
-      doc.text(d.contactLine, right, y - 10, { align: 'right' });
-      doc.text(d.email, right, y + 4, { align: 'right' });
-
-      y += 36;
-      doc.setDrawColor(221, 231, 240); doc.setLineWidth(1);
-      doc.line(left, y, right, y);
-
-      y += 32;
-      doc.setFontSize(19); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
-      doc.text('Service Receipt / Slip', left, y);
-
-      // Bill-to / meta box, ice background with a blue left accent bar
-      y += 16;
-      var metaH = 58;
-      doc.setFillColor(244, 248, 251);
-      doc.roundedRect(left, y, contentW, metaH, 6, 6, 'F');
-      doc.setFillColor(accentBlue[0], accentBlue[1], accentBlue[2]);
-      doc.rect(left, y, 4, metaH, 'F');
-
-      doc.setFontSize(9.5); doc.setTextColor(76, 96, 121); doc.setFont(undefined, 'bold');
-      doc.text('BILL TO', left + 16, y + 18);
-      doc.text('REF', right - 140, y + 18);
-      doc.setFont(undefined, 'normal'); doc.setTextColor(20, 20, 20); doc.setFontSize(10.5);
-      doc.text(d.billTo, left + 16, y + 33);
-      doc.text(d.phone, left + 16, y + 47);
-      doc.setFont(undefined, 'bold'); doc.text(d.ref, right - 140, y + 33);
-      doc.setFont(undefined, 'normal');
-      doc.text('Date: ' + d.date, right - 140, y + 47);
-      doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
-      doc.text('Order Status: ' + d.status, right - 16, y + 18, { align: 'right' });
-
-      y += metaH + 10;
-      doc.setFontSize(9.5);
-      doc.setTextColor(76, 96, 121);
+      y = small ? 19 : 36;
+      doc.setFontSize(small ? (is58 ? 10 : 12) : 16);
+      doc.setTextColor(12, 63, 102);
       doc.setFont(undefined, 'bold');
-      doc.text('PAYMENT METHOD', left + 16, y + 10);
-      doc.text('PAYMENT STATUS', left + 250, y + 10);
+      var bizLines = doc.splitTextToSize(String(d.bizName || ''), contentW);
+      doc.text(bizLines, left, y);
+      y += bizLines.length * (small ? (is58 ? 11 : 14) : 19) + 3;
+
+      doc.setFontSize(fontSmall);
+      doc.setTextColor(85, 85, 85);
       doc.setFont(undefined, 'normal');
-      doc.setTextColor(20, 20, 20);
-      doc.text(String(d.paymentMethod), left + 16, y + 24);
-      doc.text(String(d.paymentStatus), left + 250, y + 24);
 
-      y += 34;
-
-      // Table header
-      var colQty = right - 190, colUnit = right - 115, colAmt = right;
-      doc.setFillColor(234, 244, 251);
-      doc.rect(left, y - 14, contentW, 22, 'F');
-      doc.setFontSize(9); doc.setTextColor(12, 63, 102); doc.setFont(undefined, 'bold');
-      doc.text('DESCRIPTION', left + 8, y + 1);
-      doc.text('QTY', colQty, y + 1, { align: 'center' });
-      doc.text('UNIT PRICE', colUnit, y + 1, { align: 'right' });
-      doc.text('AMOUNT', colAmt, y + 1, { align: 'right' });
-      y += 20;
-
-      doc.setFont(undefined, 'normal'); doc.setFontSize(9.5); doc.setTextColor(30, 30, 30);
-      d.items.forEach(function (r, idx) {
-        var rowH = 22;
-        if (idx % 2 === 1) {
-          doc.setFillColor(249, 251, 253);
-          doc.rect(left, y - 15, contentW, rowH, 'F');
-        }
-        doc.setTextColor(30, 30, 30);
-        doc.text(String(r.desc).slice(0, 52), left + 8, y);
-        doc.text(String(r.qty), colQty, y, { align: 'center' });
-        doc.text(String(r.unitPrice), colUnit, y, { align: 'right' });
-        doc.text(String(r.amount), colAmt, y, { align: 'right' });
-        y += rowH;
+      var phoneLines = String(d.contactLine || '').split(' / ');
+      phoneLines.forEach(function (phoneLine) {
+        var lines = doc.splitTextToSize(phoneLine, contentW);
+        doc.text(lines, left, y);
+        y += lines.length * lineGap;
       });
+
+      var emailLines = doc.splitTextToSize(String(d.email || ''), contentW);
+      doc.text(emailLines, left, y);
+      y += emailLines.length * lineGap + (small ? 5 : 10);
+
       doc.setDrawColor(221, 231, 240);
-      doc.line(left, y - 15, right, y - 15);
+      doc.setLineWidth(0.7);
+      doc.line(left, y, right, y);
+      y += small ? 17 : 32;
 
-      // Totals box, right-aligned, boxed
-      y += 14;
-      var boxW = 220, boxX = right - boxW;
-      var lineCount = d.other ? 4 : 3;
-      var boxH = lineCount * 20 + 16;
+      doc.setFontSize(small ? (is58 ? 10 : 12) : 19);
+      doc.setTextColor(12, 63, 102);
+      doc.setFont(undefined, 'bold');
+      var titleLines = doc.splitTextToSize('Service Receipt / Slip', contentW);
+      doc.text(titleLines, left, y);
+      y += titleLines.length * (small ? 13 : 22) + (small ? 5 : 10);
+
+      // Keep all order and payment details visible.
+      var detailFont = small ? fontSmall : 9;
+      var valueFont = small ? fontBody : 10;
+      var details = [
+        ['BILL TO', d.billTo],
+        ['PHONE', d.phone],
+        ['REF', d.ref],
+        ['DATE', d.date],
+        ['ORDER STATUS', d.status],
+        ['PAYMENT METHOD', d.paymentMethod],
+        ['PAYMENT STATUS', d.paymentStatus]
+      ];
+
+      var detailPad = small ? 5 : 9;
+      var detailLineH = small ? (is58 ? 10 : 11) : 13;
+      var detailValueGap = small ? 2 : 3;
+      var detailHeights = details.map(function (pair) {
+        var valueLines = doc.splitTextToSize(
+          String(pair[1] == null || pair[1] === '' ? '—' : pair[1]),
+          contentW - detailPad * 2 - 8
+        );
+        return detailLineH + detailValueGap +
+          Math.max(1, valueLines.length) * detailLineH + detailPad;
+      });
+      var detailBoxH = detailHeights.reduce(function (a, b) { return a + b; }, detailPad);
+
       doc.setFillColor(244, 248, 251);
-      doc.roundedRect(boxX, y, boxW, boxH, 6, 6, 'F');
+      doc.roundedRect(left, y, contentW, detailBoxH, small ? 3 : 6, small ? 3 : 6, 'F');
+      doc.setFillColor(accentBlue[0], accentBlue[1], accentBlue[2]);
+      doc.rect(left, y, small ? 2 : 4, detailBoxH, 'F');
 
-      var ty = y + 20;
-      doc.setFontSize(10); doc.setTextColor(76, 96, 121); doc.setFont(undefined, 'normal');
-      doc.text('Subtotal', boxX + 14, ty);
-      doc.text(d.subtotal, right - 14, ty, { align: 'right' });
-      ty += 20;
-      doc.text(d.vatLabel, boxX + 14, ty);
-      doc.text(d.vat, right - 14, ty, { align: 'right' });
-      ty += 20;
-      if (d.other) {
-        doc.text('Delivery / Other', boxX + 14, ty);
-        doc.text(d.other, right - 14, ty, { align: 'right' });
-        ty += 20;
+      var dy = y + detailPad;
+      details.forEach(function (pair) {
+        doc.setFontSize(detailFont);
+        doc.setTextColor(76, 96, 121);
+        doc.setFont(undefined, 'bold');
+        doc.text(pair[0], left + detailPad + 3, dy);
+        dy += detailLineH + detailValueGap;
+
+        doc.setFontSize(valueFont);
+        doc.setTextColor(20, 20, 20);
+        doc.setFont(undefined, 'normal');
+        var valueLines = doc.splitTextToSize(
+          String(pair[1] == null || pair[1] === '' ? '—' : pair[1]),
+          contentW - detailPad * 2 - 8
+        );
+        doc.text(valueLines, left + detailPad + 3, dy);
+        dy += Math.max(1, valueLines.length) * detailLineH + detailPad;
+      });
+
+      y += detailBoxH + (small ? 10 : 16);
+
+      if (isThermal) {
+        // Thermal paper: stack every item field within the usable paper width.
+        (d.items || []).forEach(function (r, idx) {
+          var innerLeft = left + 4;
+          var innerRight = right - 4;
+          var rowW = Math.max(20, innerRight - innerLeft);
+          var descLines = doc.splitTextToSize(
+            String(r.desc || 'Item'),
+            rowW
+          );
+          var rowTop = y;
+          var descLineH = lineGap;
+          var valueLineH = lineGap + 1;
+          var rowH = descLines.length * descLineH + valueLineH * 3 + 8;
+
+          if (idx % 2 === 0) {
+            doc.setFillColor(249, 251, 253);
+            doc.rect(left, rowTop - 3, contentW, rowH, 'F');
+          }
+
+          doc.setFontSize(fontBody);
+          doc.setFont(undefined, 'bold');
+          doc.setTextColor(30, 30, 30);
+          doc.text(descLines, innerLeft, y + descLineH - 2);
+          y += descLines.length * descLineH + 2;
+
+          doc.setFontSize(fontSmall);
+          doc.setFont(undefined, 'normal');
+          doc.setTextColor(30, 30, 30);
+          doc.text('Qty: ' + String(r.qty), innerLeft, y);
+          y += valueLineH;
+
+          doc.text('Unit price: ' + String(r.unitPrice), innerLeft, y);
+          y += valueLineH;
+
+          doc.setFont(undefined, 'bold');
+          var amountText = 'Amount: ' + String(r.amount);
+          var amountLines = doc.splitTextToSize(amountText, rowW);
+          doc.text(amountLines, innerLeft, y);
+          y += Math.max(1, amountLines.length) * valueLineH + 5;
+
+          doc.setDrawColor(230, 235, 240);
+          doc.line(left, y - 2, right, y - 2);
+        });
+      } else {
+        // A4 table: use adaptive columns and wrap long descriptions.
+        var qtyX = left + contentW * 0.57;
+        var unitX = left + contentW * 0.79;
+        var amtX = right - 7;
+        var descW = qtyX - left - 20;
+
+        doc.setFillColor(234, 244, 251);
+        doc.rect(left, y - 12, contentW, 22, 'F');
+        doc.setFontSize(8.5);
+        doc.setTextColor(12, 63, 102);
+        doc.setFont(undefined, 'bold');
+        doc.text('DESCRIPTION', left + 7, y + 2);
+        doc.text('QTY', qtyX, y + 2, { align: 'center' });
+        doc.text('UNIT PRICE', unitX, y + 2, { align: 'right' });
+        doc.text('AMOUNT', amtX, y + 2, { align: 'right' });
+        y += 22;
+
+        (d.items || []).forEach(function (r, idx) {
+          var descLines = doc.splitTextToSize(String(r.desc || 'Item'), descW);
+          var rowH = Math.max(22, descLines.length * 12 + 8);
+
+          if (idx % 2 === 1) {
+            doc.setFillColor(249, 251, 253);
+            doc.rect(left, y - 13, contentW, rowH, 'F');
+          }
+
+          doc.setFontSize(9);
+          doc.setFont(undefined, 'normal');
+          doc.setTextColor(30, 30, 30);
+          doc.text(descLines, left + 7, y);
+          doc.text(String(r.qty), qtyX, y, { align: 'center' });
+          doc.text(String(r.unitPrice), unitX, y, { align: 'right' });
+          doc.text(String(r.amount), amtX, y, { align: 'right' });
+          y += rowH;
+        });
+
+        doc.setDrawColor(221, 231, 240);
+        doc.line(left, y - 8, right, y - 8);
+        y += 8;
       }
-      doc.setDrawColor(12, 63, 102); doc.setLineWidth(1.2);
-      doc.line(boxX + 14, ty - 6, right - 14, ty - 6);
-      ty += 12;
-      doc.setFontSize(13.5); doc.setFont(undefined, 'bold'); doc.setTextColor(12, 63, 102);
-      doc.text('Total', boxX + 14, ty);
-      doc.text(d.total, right - 14, ty, { align: 'right' });
 
-      y = y + boxH + 60;
-      doc.setDrawColor(221, 221, 221); doc.setLineWidth(0.75);
-      doc.line(left, y - 14, right, y - 14);
-      doc.setFontSize(8.5); doc.setFont(undefined, 'normal'); doc.setTextColor(120, 120, 120);
-      doc.text('Printed by: ' + d.printedBy, left, y);
-      doc.text(d.printedAt, right, y, { align: 'right' });
+      // Totals always fit the available paper width.
+      y += small ? 5 : 12;
+      var boxW = small ? contentW : Math.min(250, contentW);
+      var boxX = right - boxW;
+      var totalRows = d.other ? 4 : 3;
+      var boxH = totalRows * (small ? 14 : 20) + (small ? 13 : 18);
+
+      doc.setFillColor(244, 248, 251);
+      doc.roundedRect(boxX, y, boxW, boxH, small ? 3 : 6, small ? 3 : 6, 'F');
+
+      var ty = y + (small ? 12 : 20);
+      var labelX = boxX + (small ? 5 : 14);
+      var amountX = right - (small ? 5 : 14);
+      var totalFont = small ? fontSmall : 10;
+
+      doc.setFontSize(totalFont);
+      doc.setTextColor(76, 96, 121);
+      doc.setFont(undefined, 'normal');
+      doc.text('Subtotal', labelX, ty);
+      doc.text(String(d.subtotal), amountX, ty, { align: 'right' });
+      ty += small ? 14 : 20;
+
+      doc.text(String(d.vatLabel || 'VAT'), labelX, ty);
+      doc.text(String(d.vat), amountX, ty, { align: 'right' });
+      ty += small ? 14 : 20;
+
+      if (d.other) {
+        doc.text('Delivery / Other', labelX, ty);
+        doc.text(String(d.other), amountX, ty, { align: 'right' });
+        ty += small ? 14 : 20;
+      }
+
+      doc.setDrawColor(12, 63, 102);
+      doc.setLineWidth(1);
+      doc.line(labelX, ty - 5, amountX, ty - 5);
+      ty += small ? 8 : 12;
+
+      doc.setFontSize(small ? (is58 ? 8 : 9) : 13);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(12, 63, 102);
+      doc.text('TOTAL', labelX, ty);
+      doc.text(String(d.total), amountX, ty, { align: 'right' });
+
+      y += boxH + (small ? 25 : 55);
+      doc.setDrawColor(221, 221, 221);
+      doc.setLineWidth(0.7);
+      doc.line(left, y - 10, right, y - 10);
+
+      doc.setFontSize(small ? (is58 ? 6 : 7) : 8.5);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(120, 120, 120);
+      var printedBy = doc.splitTextToSize(
+        'Printed by: ' + String(d.printedBy || ''),
+        contentW
+      );
+      doc.text(printedBy, left, y);
+      y += printedBy.length * lineGap;
+      var printedAt = doc.splitTextToSize(String(d.printedAt || ''), contentW);
+      doc.text(printedAt, left, y);
 
       return doc;
     }
