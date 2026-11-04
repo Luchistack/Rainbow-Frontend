@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
   PRODUCTS, SELF_WASH_RATES, STAFF_WASH_RATES, DRY_CLEAN_ITEMS, SHOE_CARE_ITEMS,
-  ADDON_PRODUCTS, CLEANING_SERVICES, EXPRESS_SERVICES, ADDON_GROUPS,
+  ADDON_PRODUCTS, CLEANING_SERVICES, EXPRESS_SERVICES, ADDON_GROUPS, SUBSCRIPTION_PLANS,
 } from "../data/constants";
-import { fetchCleaningServices, fetchBookings, fetchProducts, fetchOrders, fetchShopOrders } from "../api/api";
+import { fetchCleaningServices, fetchBookings, fetchProducts, fetchOrders, fetchShopOrders, fetchSubscriptionPlans } from "../api/api";
 
 const CLEANING_PARENT_LABELS = ["Home Cleaning", "Office Cleaning", "Deep Cleaning", "Upholstery Cleaning"];
 
@@ -200,6 +200,22 @@ export function AppProvider({ children }) {
     }
   };
 
+  // Subscription plans are managed independently from the laundry pricing catalog.
+  const [subscriptionPlans, setSubscriptionPlans] = useState(SUBSCRIPTION_PLANS);
+
+  const refreshSubscriptionPlans = async () => {
+    try {
+      const data = await fetchSubscriptionPlans();
+      if (Array.isArray(data)) {
+        setSubscriptionPlans(data);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      return false;
+    }
+  };
+
   const [laundryOrders, setLaundryOrders] = usePersistedState("laundryOrders", SEED_LAUNDRY_ORDERS);
   const [bookings, setBookings] = usePersistedState("bookings", SEED_BOOKINGS);
   const [shopOrders, setShopOrders] = usePersistedState("shopOrders", []);
@@ -215,6 +231,12 @@ export function AppProvider({ children }) {
   // Services and Book Cleaning too, not just logged-in staff.
   useEffect(() => {
     refreshServices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load active subscription plans separately from the service pricing catalog.
+  useEffect(() => {
+    refreshSubscriptionPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -338,6 +360,7 @@ export function AppProvider({ children }) {
     toast, notify,
     products, setProducts,
     allServices, refreshServices,
+    subscriptionPlans, refreshSubscriptionPlans,
     selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, cleaningServices, expressServices,
     laundryOrders, setLaundryOrders,
     bookings, setBookings,

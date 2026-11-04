@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Lock, LayoutDashboard, Truck, Calendar, Package, Plus, Minus, ShoppingBag, History, Search,
   Archive, Shirt, RefreshCw, DollarSign, BarChart3, Printer, LogOut, User, Eye, EyeOff, KeyRound, Shield, Trash2,
-  Zap, ChevronDown, ChevronUp, X,
+  Zap, ChevronDown, ChevronUp, X, Star,
 } from "lucide-react";
 import {
   TRACK_STAGES, PAYMENT_STATUSES, PAYMENT_METHODS, ADDON_GROUPS, DELIVERY_FEE, VAT_RATE,
@@ -16,6 +16,7 @@ import {
   createOrder, updateOrder, deleteOrder, createShopOrder, updateShopOrder, deleteShopOrder, deleteBooking,
   createLaundryService, updateLaundryService, deleteLaundryService,
   fetchExpressQuoteRequests, updateExpressQuoteRequest,
+  fetchManageSubscriptionPlans, createSubscriptionPlan, updateSubscriptionPlan, deleteSubscriptionPlan,
 } from "../api/api";
 
 const MIN_UNIT = 5;
@@ -36,7 +37,7 @@ export default function Admin() {
     products, setProducts,
     selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, expressServices, cleaningServices,
     refreshServices,
-    currentUser, setCurrentUser, refreshAll,
+    currentUser, setCurrentUser, refreshAll, refreshSubscriptionPlans,
     notify,
   } = useApp();
 
@@ -63,6 +64,16 @@ export default function Admin() {
   const [newStatus, setNewStatus] = useState("Active");
   const [addingProduct, setAddingProduct] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState({});
+
+  // Subscription plans have their own state, separate from laundry pricing.
+  const [managedSubscriptionPlans, setManagedSubscriptionPlans] = useState([]);
+  const [subscriptionDraft, setSubscriptionDraft] = useState({
+    name: "", price: "", duration: "", covers: "", active: true,
+  });
+  const [editingSubscriptionId, setEditingSubscriptionId] = useState(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
+  const [subscriptionSaving, setSubscriptionSaving] = useState(false);
+  const [confirmDeleteSubscriptionId, setConfirmDeleteSubscriptionId] = useState(null);
 
   // "Add new item" input state, one per pricing category — kept minimal since
   // it's just a label/price pair (plus a group for add-ons) before Add is clicked.
@@ -260,6 +271,108 @@ export default function Admin() {
     if (currentUser) loadExpressQuoteRequests(true);
     else setExpressQuoteRequests([]);
   }, [currentUser]);
+
+  const loadSubscriptionPlans = async (quiet = false) => {
+    setSubscriptionLoading(true);
+    try {
+      const rows = await fetchManageSubscriptionPlans();
+      setManagedSubscriptionPlans(Array.isArray(rows) ? rows : []);
+      return true;
+    } catch (error) {
+      if (!quiet) notify(error?.message || "Could not load subscription plans");
+      return false;
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === "subscriptions" && currentUser && canEditPricing) {
+      loadSubscriptionPlans();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, currentUser, canEditPricing]);
+
+  const resetSubscriptionDraft = () => {
+    setSubscriptionDraft({ name: "", price: "", duration: "", covers: "", active: true });
+    setEditingSubscriptionId(null);
+  };
+
+  const editSubscriptionPlan = (plan) => {
+    setSubscriptionDraft({
+      name: plan.name || "",
+      price: String(plan.price ?? ""),
+      duration: plan.duration || "",
+      covers: plan.covers || "",
+      active: Boolean(plan.active),
+    });
+    setEditingSubscriptionId(plan.id);
+    setConfirmDeleteSubscriptionId(null);
+  };
+
+  const saveSubscriptionPlan = async () => {
+    const payload = {
+      name: subscriptionDraft.name.trim(),
+      price: Number(subscriptionDraft.price),
+      duration: subscriptionDraft.duration.trim(),
+      covers: subscriptionDraft.covers.trim(),
+      active: Boolean(subscriptionDraft.active),
+    };
+
+    if (!payload.name || !payload.duration || !payload.covers ||
+        !Number.isFinite(payload.price) || payload.price <= 0) {
+      notify("Enter a plan name, a valid price, duration and coverage.");
+      return;
+    }
+
+    setSubscriptionSaving(true);
+    try {
+      if (editingSubscriptionId !== null) {
+        await updateSubscriptionPlan(editingSubscriptionId, payload);
+        notify("Subscription plan updated.");
+      } else {
+        await createSubscriptionPlan(payload);
+        notify("Subscription plan added.");
+      }
+      resetSubscriptionDraft();
+      await loadSubscriptionPlans(true);
+      await refreshSubscriptionPlans();
+    } catch (error) {
+      notify(error?.message || "Could not save subscription plan");
+    } finally {
+      setSubscriptionSaving(false);
+    }
+  };
+
+  const toggleSubscriptionPlan = async (plan) => {
+    try {
+      await updateSubscriptionPlan(plan.id, {
+        name: plan.name,
+        price: Number(plan.price),
+        duration: plan.duration,
+        covers: plan.covers,
+        active: !plan.active,
+      });
+      await loadSubscriptionPlans(true);
+      await refreshSubscriptionPlans();
+      notify(plan.active ? "Subscription plan deactivated." : "Subscription plan activated.");
+    } catch (error) {
+      notify(error?.message || "Could not update subscription plan");
+    }
+  };
+
+  const removeSubscriptionPlan = async (id) => {
+    try {
+      await deleteSubscriptionPlan(id);
+      setConfirmDeleteSubscriptionId(null);
+      if (editingSubscriptionId === id) resetSubscriptionDraft();
+      await loadSubscriptionPlans(true);
+      await refreshSubscriptionPlans();
+      notify("Subscription plan deleted.");
+    } catch (error) {
+      notify(error?.message || "Could not delete subscription plan");
+    }
+  };
 
   const beginExpressQuoteEdit = (request) => {
     setEditingExpressQuoteId(request.dbId);
@@ -1040,6 +1153,7 @@ export default function Admin() {
     { id: "history", label: "History", icon: History },
     canEditPricing && { id: "inventory", label: "Inventory", icon: Package },
     canEditPricing && { id: "pricing", label: "Pricing", icon: DollarSign },
+    canEditPricing && { id: "subscriptions", label: "Subscriptions", icon: Star },
     canSeeReports && { id: "reports", label: "Reports", icon: BarChart3 },
     canSeeOverview && { id: "team", label: "Team Management", icon: User },
     { id: "account", label: "Change Password", icon: Shield },
@@ -1902,6 +2016,141 @@ export default function Admin() {
               </div>
               <button className="rw-btn rw-btn-primary" onClick={addAddon}><Plus size={15} /> Add Product</button>
             </div>
+          </div>
+        )}
+
+        {tab === "subscriptions" && canEditPricing && (
+          <div>
+            <div className="rw-admin-panel-head">
+              <div>
+                <h2 style={{ marginBottom: 4 }}>Subscription Plans</h2>
+                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>
+                  Add, edit, activate or remove customer subscription plans.
+                </p>
+              </div>
+            </div>
+
+            <h4 style={{ fontSize: 14, marginBottom: 10 }}>
+              {editingSubscriptionId !== null ? "Edit subscription plan" : "Add a subscription plan"}
+            </h4>
+
+            <div className="rw-form-grid" style={{ marginBottom: 16, alignItems: "end" }}>
+              <div>
+                <label>Plan name</label>
+                <input
+                  placeholder="e.g. Regular"
+                  value={subscriptionDraft.name}
+                  onChange={(e) => setSubscriptionDraft((s) => ({ ...s, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label>Price (₦)</label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="50000"
+                  value={subscriptionDraft.price}
+                  onChange={(e) => setSubscriptionDraft((s) => ({ ...s, price: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label>Duration</label>
+                <input
+                  placeholder="e.g. 2 weeks"
+                  value={subscriptionDraft.duration}
+                  onChange={(e) => setSubscriptionDraft((s) => ({ ...s, duration: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label>What the plan covers</label>
+                <input
+                  placeholder="e.g. Regular clothes only"
+                  value={subscriptionDraft.covers}
+                  onChange={(e) => setSubscriptionDraft((s) => ({ ...s, covers: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={subscriptionDraft.active}
+                    onChange={(e) => setSubscriptionDraft((s) => ({ ...s, active: e.target.checked }))}
+                  />
+                  Active plan
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  className="rw-btn rw-btn-primary"
+                  onClick={saveSubscriptionPlan}
+                  disabled={subscriptionSaving}
+                >
+                  {subscriptionSaving ? "Saving..." : editingSubscriptionId !== null ? "Save Changes" : "Add Plan"}
+                </button>
+                {editingSubscriptionId !== null && (
+                  <button className="rw-btn rw-btn-ghost" onClick={resetSubscriptionDraft}>
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <h4 style={{ fontSize: 14, marginBottom: 10 }}>Existing subscription plans</h4>
+            {subscriptionLoading ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>Loading subscription plans...</p>
+            ) : managedSubscriptionPlans.length === 0 ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>No subscription plans found.</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="rw-table">
+                  <thead>
+                    <tr>
+                      <th>Plan</th>
+                      <th>Price</th>
+                      <th>Duration</th>
+                      <th>Covers</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {managedSubscriptionPlans.map((plan) => (
+                      <tr key={plan.id}>
+                        <td>{plan.name}</td>
+                        <td>{money(plan.price)}</td>
+                        <td>{plan.duration}</td>
+                        <td>{plan.covers}</td>
+                        <td>{plan.active ? "Active" : "Inactive"}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => editSubscriptionPlan(plan)}>
+                              Edit
+                            </button>
+                            <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => toggleSubscriptionPlan(plan)}>
+                              {plan.active ? "Deactivate" : "Activate"}
+                            </button>
+                            {confirmDeleteSubscriptionId === plan.id ? (
+                              <>
+                                <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => removeSubscriptionPlan(plan.id)}>
+                                  Confirm Delete
+                                </button>
+                                <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteSubscriptionId(null)}>
+                                  Keep
+                                </button>
+                              </>
+                            ) : (
+                              <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteSubscriptionId(plan.id)}>
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

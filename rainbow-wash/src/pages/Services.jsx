@@ -4,7 +4,7 @@ import PageHeader from "../components/PageHeader";
 import Steps from "../components/Steps";
 import Testimonials from "../components/Testimonials";
 import FAQ from "../components/FAQ";
-import { buildWhatsAppLink, SUBSCRIPTION_PLANS } from "../data/constants";
+import { buildWhatsAppLink } from "../data/constants";
 import { money } from "../utils/format";
 import { useApp } from "../context/AppContext";
 
@@ -39,7 +39,7 @@ const SERVICES_FAQ = [
 ];
 
 export default function Services() {
-  const { selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, cleaningServices } = useApp();
+  const { selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, cleaningServices, subscriptionPlans } = useApp();
 
   const subscribeLink = (plan) =>
     buildWhatsAppLink(`Hi Rainbow Wash, I'd like to subscribe to the ${plan.name} plan (${money(plan.price)}, ${plan.duration}).`);
@@ -144,7 +144,7 @@ export default function Services() {
           <p>Subscribe once, we handle the rest, no need to place a fresh order every time.</p>
         </div>
         <div className="rw-grid-3">
-          {SUBSCRIPTION_PLANS.map((plan) => (
+          {subscriptionPlans.filter((plan) => plan.active).map((plan) => (
             <div className="rw-card" key={plan.id} style={{ textAlign: "center" }}>
               <Star size={20} color="var(--blue)" style={{ marginBottom: 10 }} />
               <h3 style={{ fontSize: 18 }}>{plan.name}</h3>

@@ -340,3 +340,49 @@ export const updateExpressQuoteRequest = async (dbId, patch) => {
   }
   return mapRef(data);
 };
+
+// --- SUBSCRIPTION PLANS ---
+export const fetchSubscriptionPlans = async () => {
+  const response = await fetch(`${API_BASE_URL}/subscription-plans`);
+  if (!response.ok) throw new Error('Failed to fetch subscription plans');
+  return await response.json();
+};
+
+export const fetchManageSubscriptionPlans = async () => {
+  const response = await fetch(`${API_BASE_URL}/subscription-plans/manage`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Failed to fetch subscription plans');
+  return await response.json();
+};
+
+export const createSubscriptionPlan = async (planData) => {
+  const response = await fetch(`${API_BASE_URL}/subscription-plans`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(planData),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || data.error || 'Failed to create subscription plan');
+  return data;
+};
+
+export const updateSubscriptionPlan = async (id, planData) => {
+  const response = await fetch(`${API_BASE_URL}/subscription-plans/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(planData),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || data.error || 'Failed to update subscription plan');
+  return data;
+};
+
+export const deleteSubscriptionPlan = async (id) => {
+  const response = await fetch(`${API_BASE_URL}/subscription-plans/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error('Failed to delete subscription plan');
+  return true;
+};
