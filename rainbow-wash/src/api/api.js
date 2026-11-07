@@ -386,3 +386,53 @@ export const deleteSubscriptionPlan = async (id) => {
   if (!response.ok) throw new Error('Failed to delete subscription plan');
   return true;
 };
+
+// --- SUBSCRIPTION PURCHASES ---
+export const fetchSubscriptionPurchases = async () => {
+  const response = await fetch(`${API_BASE_URL}/subscription-purchases`, {
+    headers: getAuthHeaders(),
+  });
+  const data = await response.json().catch(() => []);
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'Failed to fetch subscription purchases');
+  }
+  return mapRefList(data);
+};
+
+export const createSubscriptionPurchase = async (purchaseData) => {
+  const response = await fetch(`${API_BASE_URL}/subscription-purchases`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(purchaseData),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'Failed to record subscription purchase');
+  }
+  return mapRef(data);
+};
+
+export const updateSubscriptionPurchasePaymentStatus = async (dbId, paymentStatus) => {
+  const response = await fetch(`${API_BASE_URL}/subscription-purchases/${dbId}/payment-status`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ paymentStatus }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'Failed to update subscription payment status');
+  }
+  return mapRef(data);
+};
+
+export const markSubscriptionPurchasePrinted = async (dbId) => {
+  const response = await fetch(`${API_BASE_URL}/subscription-purchases/${dbId}/printed`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || data.error || 'Failed to mark subscription receipt as printed');
+  }
+  return mapRef(data);
+};

@@ -149,7 +149,10 @@ export default function Services() {
               <Star size={20} color="var(--blue)" style={{ marginBottom: 10 }} />
               <h3 style={{ fontSize: 18 }}>{plan.name}</h3>
               <div className="rw-price" style={{ fontSize: 26, margin: "10px 0" }}>{money(plan.price)}</div>
-              <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 10 }}>{plan.duration}</div>
+              <div style={{ fontSize: 13, color: "var(--ink-soft)", marginBottom: 6 }}>{plan.duration}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
+                {plan.kgAllowance != null ? `${plan.kgAllowance} KG` : "KG to be confirmed"}
+              </div>
               <p style={{ fontSize: 14, color: "var(--ink)", marginBottom: 16 }}>{plan.covers}</p>
               <a href={subscribeLink(plan)} target="_blank" rel="noopener noreferrer" className="rw-btn rw-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
                 <MessageCircle size={15} /> Subscribe

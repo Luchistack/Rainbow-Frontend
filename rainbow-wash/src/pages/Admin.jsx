@@ -10,6 +10,7 @@ import {
 import { money, formatPlacedAt, matchesRange, genRef } from "../utils/format";
 import { useApp } from "../context/AppContext";
 import { openPrintSlip, openExpressQuotePrintSlip } from "../utils/print";
+import { openSubscriptionPrintSlip } from "../utils/subscriptionPrint";
 import {
   loginAdmin, logoutUser, createEmployee, fetchEmployees, resetEmployeePassword, deleteEmployee, changePassword,
   createProduct, updateProduct, deleteProduct, createBooking, updateBooking,
@@ -17,6 +18,8 @@ import {
   createLaundryService, updateLaundryService, deleteLaundryService,
   fetchExpressQuoteRequests, updateExpressQuoteRequest,
   fetchManageSubscriptionPlans, createSubscriptionPlan, updateSubscriptionPlan, deleteSubscriptionPlan,
+  fetchSubscriptionPurchases, createSubscriptionPurchase,
+  updateSubscriptionPurchasePaymentStatus, markSubscriptionPurchasePrinted,
 } from "../api/api";
 
 const MIN_UNIT = 5;
@@ -37,7 +40,7 @@ export default function Admin() {
     products, setProducts,
     selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, expressServices, cleaningServices,
     refreshServices,
-    currentUser, setCurrentUser, refreshAll, refreshSubscriptionPlans,
+    currentUser, setCurrentUser, refreshAll, refreshSubscriptionPlans, subscriptionPlans,
     notify,
   } = useApp();
 
@@ -68,12 +71,20 @@ export default function Admin() {
   // Subscription plans have their own state, separate from laundry pricing.
   const [managedSubscriptionPlans, setManagedSubscriptionPlans] = useState([]);
   const [subscriptionDraft, setSubscriptionDraft] = useState({
-    name: "", price: "", duration: "", covers: "", active: true,
+    name: "", price: "", duration: "", kgAllowance: "", covers: "", active: true,
   });
   const [editingSubscriptionId, setEditingSubscriptionId] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [subscriptionSaving, setSubscriptionSaving] = useState(false);
   const [confirmDeleteSubscriptionId, setConfirmDeleteSubscriptionId] = useState(null);
+
+  const [subscriptionPurchases, setSubscriptionPurchases] = useState([]);
+  const [subscriptionPurchaseLoading, setSubscriptionPurchaseLoading] = useState(false);
+  const [subscriptionPurchaseSaving, setSubscriptionPurchaseSaving] = useState(false);
+  const [subscriptionPurchaseDraft, setSubscriptionPurchaseDraft] = useState({
+    customerName: "", customerPhone: "", planId: "", startDate: "", expiryDate: "", paymentMethod: "Transfer",
+  });
+  const [updatingSubscriptionPurchaseId, setUpdatingSubscriptionPurchaseId] = useState(null);
 
   // "Add new item" input state, one per pricing category — kept minimal since
   // it's just a label/price pair (plus a group for add-ons) before Add is clicked.
@@ -287,14 +298,122 @@ export default function Admin() {
   };
 
   useEffect(() => {
-    if (tab === "subscriptions" && currentUser && canEditPricing) {
-      loadSubscriptionPlans();
+    if (currentUser) {
+      loadSubscriptionPurchases(true);
+      if (tab === "subscriptions" && canEditPricing) loadSubscriptionPlans();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, currentUser, canEditPricing]);
 
+  const loadSubscriptionPurchases = async (quiet = false) => {
+    setSubscriptionPurchaseLoading(true);
+    try {
+      const rows = await fetchSubscriptionPurchases();
+      setSubscriptionPurchases(Array.isArray(rows) ? rows : []);
+      return true;
+    } catch (error) {
+      if (!quiet) notify(error?.message || "Could not load subscription purchases");
+      return false;
+    } finally {
+      setSubscriptionPurchaseLoading(false);
+    }
+  };
+
+  const createWalkInSubscriptionPurchase = async () => {
+    const customerName = subscriptionPurchaseDraft.customerName.trim();
+    const customerPhone = subscriptionPurchaseDraft.customerPhone.trim();
+    const planId = Number(subscriptionPurchaseDraft.planId);
+    const { startDate, expiryDate, paymentMethod } = subscriptionPurchaseDraft;
+
+    if (!customerName || !customerPhone || !subscriptionPurchaseDraft.planId || !startDate || !expiryDate) {
+      notify("Please complete all required subscription purchase fields");
+      return;
+    }
+
+    if (!Number.isFinite(planId) || !planId) {
+      notify("Please select a valid subscription plan");
+      return;
+    }
+
+    if (expiryDate <= startDate) {
+      notify("The expiry date must be after the start date");
+      return;
+    }
+
+    const selectedPlan = (subscriptionPlans || []).find(
+      (plan) => Number(plan.id) === planId
+    );
+
+    if (!selectedPlan || selectedPlan.active === false || !(Number(selectedPlan.kgAllowance) > 0)) {
+      notify("Please select an active subscription plan with a valid KG allowance");
+      return;
+    }
+
+    setSubscriptionPurchaseSaving(true);
+    try {
+      const created = await createSubscriptionPurchase({
+        customerName,
+        customerPhone,
+        planId,
+        startDate,
+        expiryDate,
+        paymentMethod,
+      });
+
+      setSubscriptionPurchases((previous) => [created, ...previous]);
+      setSubscriptionPurchaseDraft({
+        customerName: "", customerPhone: "", planId: "", startDate: "", expiryDate: "", paymentMethod: "Transfer",
+      });
+      notify("Subscription purchase recorded successfully");
+    } catch (error) {
+      notify(error?.message || "Could not record subscription purchase");
+    } finally {
+      setSubscriptionPurchaseSaving(false);
+    }
+  };
+
+  const updateWalkInSubscriptionPayment = async (purchase, paymentStatus) => {
+    if (!purchase?.dbId) {
+      notify("This subscription purchase is missing its database ID");
+      return;
+    }
+
+    setUpdatingSubscriptionPurchaseId(purchase.dbId);
+    try {
+      const updated = await updateSubscriptionPurchasePaymentStatus(purchase.dbId, paymentStatus);
+      setSubscriptionPurchases((previous) =>
+        previous.map((item) => item.dbId === purchase.dbId ? updated : item)
+      );
+      notify("Subscription payment status updated");
+    } catch (error) {
+      notify(error?.message || "Could not update subscription payment status");
+    } finally {
+      setUpdatingSubscriptionPurchaseId(null);
+    }
+  };
+
+  const printSubscriptionPurchase = (purchase) => {
+    if (!purchase?.dbId) {
+      notify("This subscription purchase is missing its database ID");
+      return;
+    }
+
+    openSubscriptionPrintSlip(purchase, currentUser, async () => {
+      try {
+        await markSubscriptionPurchasePrinted(purchase.dbId);
+        setSubscriptionPurchases((previous) =>
+          previous.map((item) =>
+            item.dbId === purchase.dbId ? { ...item, printed: true } : item
+          )
+        );
+      } catch (error) {
+        notify(error?.message || "Receipt printed, but its print status could not be saved");
+      }
+    });
+  };
+
   const resetSubscriptionDraft = () => {
-    setSubscriptionDraft({ name: "", price: "", duration: "", covers: "", active: true });
+    setSubscriptionDraft({ name: "", price: "", duration: "", kgAllowance: "", covers: "", active: true });
     setEditingSubscriptionId(null);
   };
 
@@ -303,6 +422,7 @@ export default function Admin() {
       name: plan.name || "",
       price: String(plan.price ?? ""),
       duration: plan.duration || "",
+      kgAllowance: plan.kgAllowance == null ? "" : String(plan.kgAllowance),
       covers: plan.covers || "",
       active: Boolean(plan.active),
     });
@@ -315,13 +435,15 @@ export default function Admin() {
       name: subscriptionDraft.name.trim(),
       price: Number(subscriptionDraft.price),
       duration: subscriptionDraft.duration.trim(),
+      kgAllowance: Number(subscriptionDraft.kgAllowance),
       covers: subscriptionDraft.covers.trim(),
       active: Boolean(subscriptionDraft.active),
     };
 
     if (!payload.name || !payload.duration || !payload.covers ||
-        !Number.isFinite(payload.price) || payload.price <= 0) {
-      notify("Enter a plan name, a valid price, duration and coverage.");
+        !Number.isFinite(payload.price) || payload.price <= 0 ||
+        !Number.isFinite(payload.kgAllowance) || payload.kgAllowance <= 0) {
+      notify("Enter a plan name, valid price, duration, KG allowance and coverage.");
       return;
     }
 
@@ -350,6 +472,7 @@ export default function Admin() {
         name: plan.name,
         price: Number(plan.price),
         duration: plan.duration,
+        kgAllowance: Number(plan.kgAllowance),
         covers: plan.covers,
         active: !plan.active,
       });
@@ -1108,6 +1231,26 @@ export default function Admin() {
       key: `S-${o.id}`, type: "Shop", ref: o.id, placedAt: o.placedAt, name: o.fullName, phone: o.phone, email: "",
       details: o.items.map((i) => `${i.name} ×${i.qty}`).join(", "), total: o.total, status: o.status, paymentStatus: o.paymentStatus, record: o,
     })),
+    ...subscriptionPurchases.map((purchase) => ({
+      key: `SUB-${purchase.dbId || purchase.id}`,
+      type: "Subscription",
+      ref: purchase.referenceId || purchase.id,
+      placedAt: purchase.placedAt,
+      name: purchase.customerName,
+      phone: purchase.customerPhone,
+      email: "",
+      details: [
+        purchase.planName,
+        purchase.kgAllowance != null ? `${purchase.kgAllowance} KG` : "",
+        purchase.planDuration,
+        purchase.startDate ? `Start: ${purchase.startDate}` : "",
+        purchase.expiryDate ? `Expires: ${purchase.expiryDate}` : "",
+      ].filter(Boolean).join(" · "),
+      total: purchase.total,
+      status: purchase.status || "Recorded",
+      paymentStatus: purchase.paymentStatus,
+      record: purchase,
+    })),
   ]
     .filter((r) => {
       if (historyRange === "custom") {
@@ -1153,7 +1296,7 @@ export default function Admin() {
     { id: "history", label: "History", icon: History },
     canEditPricing && { id: "inventory", label: "Inventory", icon: Package },
     canEditPricing && { id: "pricing", label: "Pricing", icon: DollarSign },
-    canEditPricing && { id: "subscriptions", label: "Subscriptions", icon: Star },
+    { id: "subscriptions", label: "Subscriptions", icon: Star },
     canSeeReports && { id: "reports", label: "Reports", icon: BarChart3 },
     canSeeOverview && { id: "team", label: "Team Management", icon: User },
     { id: "account", label: "Change Password", icon: Shield },
@@ -1702,7 +1845,7 @@ export default function Admin() {
           <div>
             <h2 style={{ marginBottom: 6 }}>History</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 13.5, marginBottom: 18 }}>
-              Every laundry order, cleaning booking and shop purchase ever placed, searchable and available for reprinting. Records are retained in the database.
+              Every laundry order, cleaning booking, shop purchase and subscription purchase, searchable and available for reprinting. Records are retained in the database.
             </p>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
@@ -1785,6 +1928,7 @@ export default function Admin() {
                             if (r.type === "Laundry") openPrintSlip(r.record, currentUser, () => markLaundryPrinted(r.record.id));
                             else if (r.type === "Cleaning") openPrintSlip(r.record, currentUser, () => markBookingPrinted(r.record.id));
                             else if (r.type === "Shop") openPrintSlip(r.record, currentUser, () => markShopPrinted(r.record.id));
+                            else if (r.type === "Subscription") printSubscriptionPurchase(r.record);
                             else if (r.type === "Express Quote") {
                               openExpressQuotePrintSlip(r.record, currentUser, () => markExpressQuotePrinted(r.record));
                             }
@@ -2019,8 +2163,169 @@ export default function Admin() {
           </div>
         )}
 
-        {tab === "subscriptions" && canEditPricing && (
+        {tab === "subscriptions" && (
           <div>
+            <div className="rw-admin-panel-head">
+              <div>
+                <h2 style={{ marginBottom: 4 }}>Walk-in Subscription Purchases</h2>
+                <p style={{ color: "var(--ink-soft)", fontSize: 13.5 }}>
+                  Record customer subscription purchases, manage payment status and print receipts.
+                </p>
+              </div>
+              <button
+                className="rw-btn rw-btn-ghost rw-btn-sm"
+                onClick={() => loadSubscriptionPurchases()}
+                disabled={subscriptionPurchaseLoading}
+              >
+                <RefreshCw size={13} /> Refresh
+              </button>
+            </div>
+
+            <h4 style={{ fontSize: 14, marginBottom: 10 }}>Record a walk-in subscription</h4>
+            <div className="rw-form-grid" style={{ marginBottom: 22, alignItems: "end" }}>
+              <div>
+                <label>Customer name</label>
+                <input
+                  value={subscriptionPurchaseDraft.customerName}
+                  onChange={(e) => setSubscriptionPurchaseDraft((s) => ({ ...s, customerName: e.target.value }))}
+                  placeholder="Customer full name"
+                />
+              </div>
+              <div>
+                <label>Customer phone</label>
+                <input
+                  type="tel"
+                  value={subscriptionPurchaseDraft.customerPhone}
+                  onChange={(e) => setSubscriptionPurchaseDraft((s) => ({ ...s, customerPhone: e.target.value }))}
+                  placeholder="Phone number"
+                />
+              </div>
+              <div>
+                <label>Subscription plan</label>
+                <select
+                  value={subscriptionPurchaseDraft.planId}
+                  onChange={(e) => setSubscriptionPurchaseDraft((s) => ({ ...s, planId: e.target.value }))}
+                >
+                  <option value="">Select an active plan</option>
+                  {(subscriptionPlans || [])
+                    .filter((plan) => plan.active !== false && Number(plan.kgAllowance) > 0)
+                    .map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name} — {money(plan.price)} · {plan.kgAllowance} kg
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label>Start date</label>
+                <input
+                  type="date"
+                  value={subscriptionPurchaseDraft.startDate}
+                  onChange={(e) => setSubscriptionPurchaseDraft((s) => ({ ...s, startDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label>Expiry date</label>
+                <input
+                  type="date"
+                  min={subscriptionPurchaseDraft.startDate || undefined}
+                  value={subscriptionPurchaseDraft.expiryDate}
+                  onChange={(e) => setSubscriptionPurchaseDraft((s) => ({ ...s, expiryDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label>Payment method</label>
+                <select
+                  value={subscriptionPurchaseDraft.paymentMethod}
+                  onChange={(e) => setSubscriptionPurchaseDraft((s) => ({ ...s, paymentMethod: e.target.value }))}
+                >
+                  <option value="Transfer">Transfer</option>
+                  <option value="POS">POS</option>
+                </select>
+              </div>
+              <div>
+                <button
+                  className="rw-btn rw-btn-primary"
+                  onClick={createWalkInSubscriptionPurchase}
+                  disabled={subscriptionPurchaseSaving}
+                >
+                  {subscriptionPurchaseSaving ? "Recording..." : "Record Subscription Purchase"}
+                </button>
+              </div>
+            </div>
+
+            <h4 style={{ fontSize: 14, marginBottom: 10 }}>Subscription purchase history</h4>
+            {subscriptionPurchaseLoading ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>Loading subscription purchases...</p>
+            ) : subscriptionPurchases.length === 0 ? (
+              <p style={{ color: "var(--ink-soft)", fontSize: 13 }}>No subscription purchases found.</p>
+            ) : (
+              <div style={{ overflowX: "auto", marginBottom: 28 }}>
+                <table className="rw-table">
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Customer</th>
+                      <th>Plan</th>
+                      <th>KG</th>
+                      <th>Start date</th>
+                      <th>Expiry date</th>
+                      <th>Total</th>
+                      <th>Payment method</th>
+                      <th>Payment status</th>
+                      <th>Recorded by</th>
+                      <th>Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subscriptionPurchases.map((purchase) => (
+                      <tr key={purchase.dbId || purchase.referenceId}>
+                        <td>{purchase.referenceId || "—"}</td>
+                        <td>
+                          <strong>{purchase.customerName || "—"}</strong>
+                          <div style={{ color: "var(--ink-soft)", fontSize: 12 }}>{purchase.customerPhone || ""}</div>
+                        </td>
+                        <td>{purchase.planName || "—"}</td>
+                        <td>{purchase.kgAllowance != null ? `${purchase.kgAllowance} kg` : "—"}</td>
+                        <td>{purchase.startDate || "—"}</td>
+                        <td>{purchase.expiryDate || "—"}</td>
+                        <td>{money(purchase.total)}</td>
+                        <td>{purchase.paymentMethod || "—"}</td>
+                        <td>
+                          <select
+                            className="rw-status-select"
+                            value={purchase.paymentStatus || "Pending"}
+                            disabled={updatingSubscriptionPurchaseId === purchase.dbId}
+                            onChange={(e) => updateWalkInSubscriptionPayment(purchase, e.target.value)}
+                          >
+                            {["Pending", "Sent", "Received", "Confirmed"].map((status) => (
+                              <option key={status} value={status}>{status}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>{purchase.createdByName || "—"}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                            <button
+                              className="rw-btn rw-btn-ghost rw-btn-sm"
+                              onClick={() => printSubscriptionPurchase(purchase)}
+                            >
+                              Print
+                            </button>
+                            {purchase.printed && (
+                              <span style={{ color: "var(--ink-soft)", fontSize: 11 }}>Printed</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {canEditPricing && (
+              <div>
             <div className="rw-admin-panel-head">
               <div>
                 <h2 style={{ marginBottom: 4 }}>Subscription Plans</h2>
@@ -2059,6 +2364,17 @@ export default function Admin() {
                   placeholder="e.g. 2 weeks"
                   value={subscriptionDraft.duration}
                   onChange={(e) => setSubscriptionDraft((s) => ({ ...s, duration: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label>KG allowance</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="e.g. 20"
+                  value={subscriptionDraft.kgAllowance}
+                  onChange={(e) => setSubscriptionDraft((s) => ({ ...s, kgAllowance: e.target.value }))}
                 />
               </div>
               <div>
@@ -2108,6 +2424,7 @@ export default function Admin() {
                       <th>Plan</th>
                       <th>Price</th>
                       <th>Duration</th>
+                      <th>KG Allowance</th>
                       <th>Covers</th>
                       <th>Status</th>
                       <th>Actions</th>
@@ -2119,6 +2436,7 @@ export default function Admin() {
                         <td>{plan.name}</td>
                         <td>{money(plan.price)}</td>
                         <td>{plan.duration}</td>
+                        <td>{plan.kgAllowance != null ? `${plan.kgAllowance} kg` : "—"}</td>
                         <td>{plan.covers}</td>
                         <td>{plan.active ? "Active" : "Inactive"}</td>
                         <td>
@@ -2149,6 +2467,8 @@ export default function Admin() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
               </div>
             )}
           </div>
