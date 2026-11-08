@@ -645,11 +645,13 @@ export default function Admin() {
   const overviewOrdersToday = laundryOrders.filter(wasPlacedToday);
   const overviewBookingsToday = bookings.filter(wasPlacedToday);
   const overviewShopOrdersToday = shopOrders.filter(wasPlacedToday);
+  const overviewSubscriptionsToday = subscriptionPurchases.filter(wasPlacedToday);
 
   const revenueToday =
     overviewOrdersToday.reduce((s, o) => s + (Number(o.total) || 0), 0) +
     overviewBookingsToday.reduce((s, b) => s + (Number(b.payable) || 0), 0) +
-    overviewShopOrdersToday.reduce((s, o) => s + (Number(o.total) || 0), 0);
+    overviewShopOrdersToday.reduce((s, o) => s + (Number(o.total) || 0), 0) +
+    overviewSubscriptionsToday.reduce((s, purchase) => s + (Number(purchase.total) || 0), 0);
 
   // --- Laundry order field updates: optimistic local update, then persist to
   // the backend if this record actually has a real DB id (records that only
@@ -1049,7 +1051,9 @@ export default function Admin() {
 
   const addDraftItem = (name, qty, price, unit) => {
     setDraftItems((its) => {
-      const existing = its.find((i) => i.name === name && i.unit === unit);
+      const existing = its.find(
+        (i) => i.name === name && i.unit === unit && Number(i.price) === Number(price)
+      );
       if (existing) return its.map((i) => (i === existing ? { ...i, qty: i.qty + qty } : i));
       return [...its, { id: `${Date.now()}-${Math.random()}`, name, qty, price, unit }];
     });
@@ -1078,9 +1082,15 @@ export default function Admin() {
   const addDraftExpressLine = () => {
     const item = expressServices.find((i) => String(i.id) === String(draftExItemId));
     if (!item) { notify("Express services are still loading, try again"); return; }
+    const price = Number(draftExPrice);
+    if (!Number.isFinite(price) || price <= 0) {
+      notify("Enter the Express price before adding the order");
+      return;
+    }
+    const isLaundry = /laundry/i.test(item.label || "");
+    const quantity = Math.min(isLaundry ? 200 : 100, Math.max(1, Number(draftExQty) || 1));
     const turnaround = draftExTurnaround === "same-day" ? "Same day Express" : "Next day Express";
-    addDraftItem(`${item.label} (${turnaround} — Quote required)`, Math.max(1, Number(draftExQty) || 1), 0, "");
-    notify("Express quote required. Confirm the price with the customer before collecting payment.");
+    addDraftItem(`${item.label} (${turnaround})`, quantity, price, isLaundry ? "kg" : "");
   };
   // Combines the real Shop inventory with the Pricing tab's add-on catalog —
   // from a walk-in customer's point of view these are all just "things we can
@@ -1272,6 +1282,16 @@ export default function Admin() {
     ...laundryOrders.map((o) => ({ type: "Laundry", ref: o.id, dbId: o.dbId, total: o.total, placedAt: o.placedAt, paymentStatus: o.paymentStatus, name: o.fullName, phone: o.phone })),
     ...bookings.map((b) => ({ type: "Cleaning", ref: b.id, dbId: b.dbId, total: b.payable, placedAt: b.placedAt, paymentStatus: b.paymentStatus, name: b.fullName, phone: b.phone })),
     ...shopOrders.map((o) => ({ type: "Shop", ref: o.id, dbId: o.dbId, total: o.total, placedAt: o.placedAt, paymentStatus: o.paymentStatus, name: o.fullName, phone: o.phone })),
+    ...subscriptionPurchases.map((purchase) => ({
+      type: "Subscription",
+      ref: purchase.referenceId || purchase.id,
+      dbId: purchase.dbId,
+      total: Number(purchase.total) || 0,
+      placedAt: purchase.placedAt,
+      paymentStatus: purchase.paymentStatus,
+      name: purchase.customerName,
+      phone: purchase.customerPhone,
+    })),
   ].filter((r) => matchesRange(r.placedAt, reportsRange));
 
   const totalInvoiced = allRecords.reduce((s, r) => s + (r.total || 0), 0);
@@ -1348,6 +1368,7 @@ export default function Admin() {
               <div className="rw-stat-card"><b>{overviewOrdersToday.length}</b><span>Laundry orders today</span></div>
               <div className="rw-stat-card"><b>{overviewBookingsToday.length}</b><span>Cleaning bookings today</span></div>
               <div className="rw-stat-card"><b>{overviewShopOrdersToday.length}</b><span>Shop orders today</span></div>
+              <div className="rw-stat-card"><b>{overviewSubscriptionsToday.length}</b><span>Subscription purchases today</span></div>
               <div className="rw-stat-card"><b>{money(revenueToday)}</b><span>Revenue today</span></div>
               <div className="rw-stat-card" style={{ background: lowStock ? "#fdece9" : "var(--ice)" }}>
                 <b style={{ color: lowStock ? "var(--bad)" : "var(--navy)" }}>{lowStock}</b>
@@ -1471,7 +1492,18 @@ export default function Admin() {
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
                     <div style={{ flex: "1 1 220px" }}>
                       <label>Express service</label>
-                      <select value={draftExItemId} onChange={(e) => setDraftExItemId(e.target.value)}>
+                      <select
+                        value={draftExItemId}
+                        onChange={(e) => {
+                          const nextId = e.target.value;
+                          const nextItem = expressServices.find((i) => String(i.id) === String(nextId));
+                          setDraftExItemId(nextId);
+                          setDraftExQty((q) => Math.min(
+                            /laundry/i.test(nextItem?.label || "") ? 200 : 100,
+                            Math.max(1, Number(q) || 1)
+                          ));
+                        }}
+                      >
                         {expressServices.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
                       </select>
                     </div>
@@ -1482,17 +1514,29 @@ export default function Admin() {
                         <option value="next-day">Next day</option>
                       </select>
                     </div>
-                    <div style={{ flex: "1 1 220px" }}>
-                      <p style={{ fontSize: 12.5, color: "var(--ink-soft)", margin: "0 0 8px" }}>
-                        Price is confirmed by staff before payment.
-                      </p>
+                    <div style={{ flex: "1 1 180px" }}>
+                      <label>{/laundry/i.test(expressServices.find((i) => String(i.id) === String(draftExItemId))?.label || "") ? "Price per KG (₦)" : "Price (₦)"}</label>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={draftExPrice}
+                        onChange={(e) => setDraftExPrice(e.target.value)}
+                        placeholder="Enter price"
+                      />
                     </div>
                     <div>
-                      <label>Qty</label>
+                      <label>{/laundry/i.test(expressServices.find((i) => String(i.id) === String(draftExItemId))?.label || "") ? "Weight (KG)" : "Qty"}</label>
                       <div className="rw-stepper">
                         <button type="button" aria-label="Decrease quantity" onClick={() => setDraftExQty((q) => Math.max(1, (Number(q) || 1) - 1))}><Minus size={15} /></button>
-                        <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>{Math.max(1, Number(draftExQty) || 1)}</span>
-                        <button type="button" aria-label="Increase quantity" onClick={() => setDraftExQty((q) => Math.min(100, (Number(q) || 1) + 1))}><Plus size={15} /></button>
+                        <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>
+                          {Math.min(
+                            /laundry/i.test(expressServices.find((i) => String(i.id) === String(draftExItemId))?.label || "") ? 200 : 100,
+                            Math.max(1, Number(draftExQty) || 1)
+                          )}
+                        </span>
+                        <button type="button" aria-label="Increase quantity" onClick={() => setDraftExQty((q) => Math.min(/laundry/i.test(expressServices.find((i) => String(i.id) === String(draftExItemId))?.label || "") ? 200 : 100, (Number(q) || 1) + 1))}><Plus size={15} /></button>
                       </div>
                     </div>
                     <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftExpressLine}><Plus size={13} /> Add</button>
