@@ -1,19 +1,20 @@
 import { useState } from "react";
 import { X, Package, Minus, Plus, Trash2, CreditCard, User } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { money, genRef } from "../utils/format";
+import { money, genRef, roundedMoneyParts } from "../utils/format";
 import { buildWhatsAppLink, VAT_RATE } from "../data/constants";
 
 function buildReceipt(order) {
   const itemLines = order.items.map((i) => `  • ${i.name} × ${i.qty}, ${money(i.price * i.qty)}`).join("\n");
+  const displayTotals = roundedMoneyParts(order.subtotal, order.tax);
   return [
     "🧴 New Shop Order, Rainbow Wash",
     `Ref: ${order.id}`,
     itemLines,
-    `Subtotal: ${money(order.subtotal)}`,
-    `VAT (7.5%): ${money(order.tax)}`,
+    `Subtotal: ${money(displayTotals.subtotal)}`,
+    `VAT (7.5%): ${money(displayTotals.vat)}`,
     `Fulfilment: ${order.mode === "delivery" ? "Delivery" : "Pickup in-store"}`,
-    `Total: ${money(order.total)}`,
+    `Total: ${money(displayTotals.total)}`,
     `Customer name: ${order.fullName}`,
     `Customer phone: ${order.phone}`,
   ].join("\n");
@@ -28,6 +29,7 @@ export default function CartDrawer({ open, onClose }) {
   const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
   const tax = subtotal * VAT_RATE;
   const total = subtotal + tax;
+  const displayTotals = roundedMoneyParts(subtotal, tax);
 
   const updateQty = (id, delta) => {
     setCart((c) => c.map((i) => (i.id === id ? { ...i, qty: Math.max(1, i.qty + delta) } : i)));
@@ -91,9 +93,9 @@ export default function CartDrawer({ open, onClose }) {
           </div>
           {cart.length > 0 && (
             <>
-              <div className="rw-summary-row" style={{ fontSize: 14 }}><span>Subtotal</span><span>{money(subtotal)}</span></div>
-              <div className="rw-summary-row" style={{ fontSize: 14 }}><span>VAT (7.5%)</span><span>{money(tax)}</span></div>
-              <div className="rw-summary-row total"><span>Total</span><span>{money(total)}</span></div>
+              <div className="rw-summary-row" style={{ fontSize: 14 }}><span>Subtotal</span><span>{money(displayTotals.subtotal)}</span></div>
+              <div className="rw-summary-row" style={{ fontSize: 14 }}><span>VAT (7.5%)</span><span>{money(displayTotals.vat)}</span></div>
+              <div className="rw-summary-row total"><span>Total</span><span>{money(displayTotals.total)}</span></div>
               <button className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} onClick={checkout}>
                 <CreditCard size={16} /> Pay & Place Order
               </button>

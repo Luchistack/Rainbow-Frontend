@@ -1,4 +1,4 @@
-export const money = (n) => `₦${Number(n).toLocaleString("en-NG")}`;
+export const money = (n) => `₦${Math.round(Number(n) || 0).toLocaleString("en-NG", { maximumFractionDigits: 0 })}`;
 
 export const genRef = (prefix) => `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -50,4 +50,21 @@ export const matchesRange = (iso, range) => {
   }
 
   return true;
+};
+
+export const roundedMoneyParts = (subtotal, vat, other = 0) => {
+  const rawSubtotal = Number(subtotal) || 0;
+  const rawVat = Number(vat) || 0;
+  const rawOther = Number(other) || 0;
+
+  const roundedSubtotal = Math.round(rawSubtotal);
+  const roundedOther = Math.round(rawOther);
+  const roundedTotal = Math.round(rawSubtotal + rawVat + rawOther);
+
+  return {
+    subtotal: roundedSubtotal,
+    vat: roundedTotal - roundedSubtotal - roundedOther,
+    other: roundedOther,
+    total: roundedTotal,
+  };
 };

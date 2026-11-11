@@ -7,7 +7,7 @@ import {
 import {
   TRACK_STAGES, PAYMENT_STATUSES, PAYMENT_METHODS, ADDON_GROUPS, DELIVERY_FEE, VAT_RATE,
 } from "../data/constants";
-import { money, formatPlacedAt, matchesRange, genRef } from "../utils/format";
+import { money, formatPlacedAt, matchesRange, genRef, roundedMoneyParts } from "../utils/format";
 import { useApp } from "../context/AppContext";
 import { openPrintSlip, openExpressQuotePrintSlip } from "../utils/print";
 import { openSubscriptionPrintSlip } from "../utils/subscriptionPrint";
@@ -37,7 +37,7 @@ const BOOKING_STAGES = ["Pending Quote", "Confirmed", "Completed", "Cancelled"];
 export default function Admin() {
   const {
     laundryOrders, setLaundryOrders, bookings, setBookings, shopOrders, setShopOrders,
-    products, setProducts,
+    products, setProducts, customServiceCategories,
     selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, expressServices, cleaningServices,
     refreshServices,
     currentUser, setCurrentUser, refreshAll, refreshSubscriptionPlans, subscriptionPlans,
@@ -67,6 +67,8 @@ export default function Admin() {
   const [newStatus, setNewStatus] = useState("Active");
   const [addingProduct, setAddingProduct] = useState(false);
   const [pricingDrafts, setPricingDrafts] = useState({});
+  const [customServiceDrafts, setCustomServiceDrafts] = useState({});
+  const [newCustomService, setNewCustomService] = useState({ category: "", name: "", description: "", pricingUnit: "Per item", price: "" });
 
   // Subscription plans have their own state, separate from laundry pricing.
   const [managedSubscriptionPlans, setManagedSubscriptionPlans] = useState([]);
@@ -92,7 +94,16 @@ export default function Admin() {
   const [newStaffWash, setNewStaffWash] = useState({ label: "", price: "" });
   const [newDryClean, setNewDryClean] = useState({ label: "", regular: "", deep: "" });
   const [newShoeCare, setNewShoeCare] = useState({ label: "", regular: "", deep: "", repair: "" });
-  const [newExpress, setNewExpress] = useState({ label: "", price: "" });
+  const [newExpress, setNewExpress] = useState({
+    label: "",
+    description: "",
+    options: [{
+      turnaround: "Same-day",
+      pricingUnit: "Per job",
+      price: "",
+      available: true,
+    }],
+  });
   const [newAddon, setNewAddon] = useState({ label: "", price: "", group: ADDON_GROUPS[0] });
 
   // Confirmation gate before permanently deleting a staff/manager account.
@@ -109,6 +120,7 @@ export default function Admin() {
   const [draftFullName, setDraftFullName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
   const [draftEmail, setDraftEmail] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
   const [draftFulfilment, setDraftFulfilment] = useState("dropoff");
   const [draftAddress, setDraftAddress] = useState("");
   const [draftDeliveryFee, setDraftDeliveryFee] = useState(DELIVERY_FEE);
@@ -130,9 +142,10 @@ export default function Admin() {
   const [draftScType, setDraftScType] = useState("regular");
   const [draftScQty, setDraftScQty] = useState(1);
   const [draftExItemId, setDraftExItemId] = useState("");
+  const [draftExOptionId, setDraftExOptionId] = useState("");
   const [draftExQty, setDraftExQty] = useState(1);
-  const [draftExTurnaround, setDraftExTurnaround] = useState("same-day");
-  const [draftExPrice, setDraftExPrice] = useState("");
+  const [draftCustomServiceId, setDraftCustomServiceId] = useState("");
+  const [draftCustomQty, setDraftCustomQty] = useState(1);
   // Shop draft product picker
   const [draftProductId, setDraftProductId] = useState("");
   const [draftProductQty, setDraftProductQty] = useState(1);
@@ -178,6 +191,29 @@ export default function Admin() {
     if (!backendRole) return "Staff";
     return backendRole.charAt(0).toUpperCase() + backendRole.slice(1).toLowerCase();
   };
+
+  const getExpressPricingOptions = (service) => {
+    if (!service) return [];
+    const configuredOptions = Array.isArray(service.expressPricingOptions)
+      ? service.expressPricingOptions
+      : [];
+    const options = configuredOptions.length
+      ? configuredOptions
+      : [{
+          id: `legacy-${service.id}`,
+          turnaround: service.turnaround || "Same-day",
+          pricingUnit: service.pricingUnit || "Per job",
+          price: service.price,
+          available: true,
+        }];
+    return options.filter((option) => option.available !== false);
+  };
+
+  const getExpressOptionKey = (option, index) =>
+    String(option.id ?? `option-${index}`);
+
+  const isExpressPerKg = (pricingUnit) =>
+    String(pricingUnit || "").toLowerCase().replace(/[^a-z]/g, "").includes("kg");
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
@@ -243,10 +279,26 @@ export default function Admin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shoeCareItems]);
 
-    useEffect(() => {
-    if (expressServices.length && !expressServices.find((i) => String(i.id) === String(draftExItemId))) setDraftExItemId(expressServices[0].id);
+  useEffect(() => {
+    const availableServices = expressServices.filter((service) => service.available !== false);
+    const selectedService =
+      availableServices.find((service) => String(service.id) === String(draftExItemId)) ||
+      availableServices[0];
+    const nextServiceId = selectedService ? String(selectedService.id) : "";
+
+    if (String(draftExItemId) !== nextServiceId) {
+      setDraftExItemId(nextServiceId);
+    }
+
+    const options = getExpressPricingOptions(selectedService);
+    const selectedOptionExists = options.some(
+      (option, index) => getExpressOptionKey(option, index) === String(draftExOptionId)
+    );
+    if (!selectedOptionExists) {
+      setDraftExOptionId(options.length ? getExpressOptionKey(options[0], 0) : "");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expressServices]);
+  }, [expressServices, draftExItemId, draftExOptionId]);
 
   // This one was previously placed after the `if (!currentUser)` early return
   // below — a genuine Rules-of-Hooks violation, since React then saw a
@@ -880,25 +932,80 @@ export default function Admin() {
     if (!draft) return;
 
     const next = { ...item, ...draft };
-    const priceFields = fields.filter((field) => field !== "label");
-    if (!String(next.label ?? "").trim() ||
-        priceFields.some((field) =>
-          next[field] === "" || !Number.isFinite(Number(next[field])) ||
-          Number(next[field]) < 0
-        )) {
-      notify("Enter a service name and valid non-negative prices before saving.");
-      return;
-    }
+    let payload;
 
-    const payload = {
-      name: String(next.label).trim(),
-      price: Number(next.price ?? next.regular),
-      category,
-      stock: 5,
-      available: true,
-    };
-    if (fields.includes("deep")) payload.deepPrice = Number(next.deep);
-    if (fields.includes("repair")) payload.repairPrice = Number(next.repair);
+    if (category === "Express") {
+      const sourceOptions =
+        Array.isArray(next.expressPricingOptions) && next.expressPricingOptions.length
+          ? next.expressPricingOptions
+          : [{
+              turnaround: next.turnaround || "same-day",
+              pricingUnit: next.pricingUnit || "PER_JOB",
+              price: next.price,
+              available: true,
+            }];
+
+      const options = sourceOptions.map((option) => ({
+        turnaround: String(option.turnaround ?? "").trim(),
+        pricingUnit: String(option.pricingUnit ?? "").trim(),
+        price: Number(option.price),
+        available: option.available !== false,
+      }));
+
+      if (
+        !String(next.label ?? "").trim() ||
+        options.length === 0 ||
+        options.some((option) =>
+          !option.turnaround ||
+          !option.pricingUnit ||
+          !Number.isFinite(option.price) ||
+          option.price <= 0
+        )
+      ) {
+        notify("Enter a service name and valid turnaround, pricing unit and positive price for every Express option.");
+        return;
+      }
+
+      const firstOption = options[0];
+      payload = {
+        name: String(next.label).trim(),
+        price: firstOption.price,
+        category: "Express",
+        stock: 5,
+        available: next.available !== false,
+        description: String(next.description ?? "").trim(),
+        turnaround: firstOption.turnaround,
+        pricingUnit: firstOption.pricingUnit,
+        expressPricingOptions: options,
+      };
+    } else {
+      const priceFields = fields.filter(
+        (field) => !["label", "description", "turnaround", "pricingUnit"].includes(field)
+      );
+
+      if (
+        !String(next.label ?? "").trim() ||
+        priceFields.some((field) =>
+          next[field] === "" ||
+          !Number.isFinite(Number(next[field])) ||
+          Number(next[field]) < 0
+        )
+      ) {
+        notify("Enter a service name and valid non-negative prices before saving.");
+        return;
+      }
+
+      payload = {
+        name: String(next.label).trim(),
+        price: Number(next.price ?? next.regular),
+        category,
+        stock: 5,
+        available: true,
+      };
+
+      if (fields.includes("deep")) payload.deepPrice = Number(next.deep);
+      if (fields.includes("repair")) payload.repairPrice = Number(next.repair);
+    }
 
     try {
       await updateLaundryService(item.id, payload);
@@ -972,12 +1079,56 @@ export default function Admin() {
     try { await deleteLaundryService(id); refreshServices(); } catch (err) { notify(err.message || "Failed to delete"); }
   };
   const addExpress = async () => {
-    if (!newExpress.label.trim() || newExpress.price === "") return;
+    const options = (newExpress.options || []).map((option) => ({
+      turnaround: String(option.turnaround ?? "").trim(),
+      pricingUnit: String(option.pricingUnit ?? "").trim(),
+      price: Number(option.price),
+      available: option.available !== false,
+    }));
+
+    if (
+      !newExpress.label.trim() ||
+      options.length === 0 ||
+      options.some((option) =>
+        !option.turnaround ||
+        !option.pricingUnit ||
+        !Number.isFinite(option.price) ||
+        option.price <= 0
+      )
+    ) {
+      notify("Enter an Express service name and at least one complete option with a positive price.");
+      return;
+    }
+
+    const firstOption = options[0];
+
     try {
-      await createLaundryService({ name: newExpress.label.trim(), price: Number(newExpress.price), category: "Express", stock: 5, available: true });
-      setNewExpress({ label: "", price: "" });
-      refreshServices();
-    } catch (err) { notify(err.message || "Failed to add"); }
+      await createLaundryService({
+        name: newExpress.label.trim(),
+        turnaround: firstOption.turnaround,
+        pricingUnit: firstOption.pricingUnit,
+        price: firstOption.price,
+        expressPricingOptions: options,
+        description: String(newExpress.description ?? "").trim(),
+        category: "Express",
+        stock: 5,
+        available: true,
+      });
+      setNewExpress({
+        label: "",
+        description: "",
+        options: [{
+          turnaround: "Same-day",
+          pricingUnit: "Per job",
+          price: "",
+          available: true,
+        }],
+      });
+      await refreshServices();
+      notify("Express service added.");
+    } catch (err) {
+      notify(err.message || "Failed to add Express service");
+    }
   };
 
   const deleteAddon = async (id) => {
@@ -990,6 +1141,68 @@ export default function Admin() {
       setNewAddon({ label: "", price: "", group: ADDON_GROUPS[0] });
       refreshServices();
     } catch (err) { notify(err.message || "Failed to add"); }
+  };
+
+  const addCustomService = async () => {
+    const category = String(newCustomService.category || "").trim();
+    const name = String(newCustomService.name || "").trim();
+    const price = Number(newCustomService.price);
+    const reserved = ["Self Wash", "Staff Wash", "Dry Cleaning", "Shoe Care", "Express", ...ADDON_GROUPS, "Home Cleaning", "Office Cleaning", "Deep Cleaning", "Upholstery Cleaning"];
+    if (!category || !name || newCustomService.price === "" || !Number.isFinite(price) || price <= 0) {
+      notify("Enter a category, service name and a positive configured price.");
+      return;
+    }
+    if (reserved.some((value) => value.toLowerCase() === category.toLowerCase())) {
+      notify("That category name is already reserved. Choose a new Laundry category name.");
+      return;
+    }
+    try {
+      await createLaundryService({
+        name, description: String(newCustomService.description || "").trim(),
+        price, category, pricingUnit: String(newCustomService.pricingUnit || "Per item").trim(),
+        stock: 5, available: true,
+      });
+      setNewCustomService((current) => ({ ...current, name: "", description: "", price: "" }));
+      await refreshServices();
+      notify(`Service added under ${category}.`);
+    } catch (error) {
+      notify(error.message || "Failed to add custom service.");
+    }
+  };
+
+  const saveCustomService = async (service) => {
+    const draft = customServiceDrafts[service.id];
+    if (!draft) return;
+    const next = { ...service, ...draft };
+    const name = String(next.name || "").trim();
+    const price = Number(next.price);
+    if (!name || !Number.isFinite(price) || price <= 0 || !String(next.pricingUnit || "").trim()) {
+      notify("Enter a service name, pricing unit and positive price before saving.");
+      return;
+    }
+    try {
+      await updateLaundryService(service.id, {
+        name, description: String(next.description || "").trim(), price,
+        category: service.category, pricingUnit: String(next.pricingUnit).trim(),
+        stock: service.stock || 5, available: next.available !== false,
+      });
+      setCustomServiceDrafts((drafts) => { const copy = { ...drafts }; delete copy[service.id]; return copy; });
+      await refreshServices();
+      notify("Custom service updated.");
+    } catch (error) {
+      notify(error.message || "Failed to update custom service.");
+    }
+  };
+
+  const deleteCustomService = async (service) => {
+    if (!window.confirm(`Delete ${service.name} from ${service.category}?`)) return;
+    try {
+      await deleteLaundryService(service.id);
+      await refreshServices();
+      notify("Custom service deleted.");
+    } catch (error) {
+      notify(error.message || "Failed to delete custom service.");
+    }
   };
 
   // --- Staff Account Deletion (Admin only, cannot delete Admin accounts) ---
@@ -1024,6 +1237,7 @@ export default function Admin() {
     setDraftFullName("");
     setDraftPhone("");
     setDraftEmail("");
+    setDraftDescription("");
     setDraftFulfilment("dropoff");
     setDraftAddress("");
     setDraftMode("pickup");
@@ -1034,9 +1248,10 @@ export default function Admin() {
     setDraftPayable("");
     setDraftProductId("");
     setDraftProductQty(1);
-    setDraftExTurnaround("same-day");
-    setDraftExPrice("");
+    setDraftExOptionId("");
     setDraftExQty(1);
+    setDraftCustomServiceId("");
+    setDraftCustomQty(1);
   };
 
   const openDraft = (type) => {
@@ -1046,7 +1261,13 @@ export default function Admin() {
     if (selfWashRates?.length) setDraftWashRateId(selfWashRates[0].id);
     if (dryCleanItems?.length) setDraftDcItemId(dryCleanItems[0].id);
     if (shoeCareItems?.length) setDraftScItemId(shoeCareItems[0].id);
-    if (expressServices?.length) setDraftExItemId(expressServices[0].id);
+    const availableExpress = expressServices.filter((service) => service.available !== false);
+    if (availableExpress.length) {
+      const firstService = availableExpress[0];
+      const firstOption = getExpressPricingOptions(firstService)[0];
+      setDraftExItemId(firstService.id);
+      setDraftExOptionId(firstOption ? getExpressOptionKey(firstOption, 0) : "");
+    }
   };
 
   const addDraftItem = (name, qty, price, unit) => {
@@ -1080,18 +1301,48 @@ export default function Admin() {
     addDraftItem(`${item.label} (${typeLabel})`, draftScQty, price, "");
   };
   const addDraftExpressLine = () => {
-    const item = expressServices.find((i) => String(i.id) === String(draftExItemId));
+    const item = expressServices.find(
+      (service) =>
+        String(service.id) === String(draftExItemId) &&
+        service.available !== false
+    );
     if (!item) { notify("Express services are still loading, try again"); return; }
-    const price = Number(draftExPrice);
-    if (!Number.isFinite(price) || price <= 0) {
-      notify("Enter the Express price before adding the order");
+
+    const options = getExpressPricingOptions(item);
+    const option = options.find(
+      (current, index) => getExpressOptionKey(current, index) === String(draftExOptionId)
+    );
+    if (!option) {
+      notify("This Express service has no available pricing option. Ask a Manager or Admin to update it.");
       return;
     }
-    const isLaundry = /laundry/i.test(item.label || "");
-    const quantity = Math.min(isLaundry ? 200 : 100, Math.max(1, Number(draftExQty) || 1));
-    const turnaround = draftExTurnaround === "same-day" ? "Same day Express" : "Next day Express";
-    addDraftItem(`${item.label} (${turnaround})`, quantity, price, isLaundry ? "kg" : "");
+
+    const price = Number(option.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      notify("This Express service has no valid configured price. Ask a Manager or Admin to update it.");
+      return;
+    }
+
+    const isPerKg = isExpressPerKg(option.pricingUnit);
+    const quantity = Math.min(isPerKg ? 200 : 100, Math.max(1, Number(draftExQty) || 1));
+    const turnaround = String(option.turnaround || "Express").trim();
+    const pricingUnit = String(option.pricingUnit || "").trim();
+    const lineName = `Express: ${item.label} (${turnaround}${pricingUnit ? `, ${pricingUnit}` : ""})`.slice(0, 160);
+    addDraftItem(lineName, quantity, price, isPerKg ? "kg" : "");
   };
+  const addDraftCustomServiceLine = () => {
+    const categoryName = String(draftCategory).slice("custom:".length);
+    const category = customServiceCategories.find((entry) => entry.name === categoryName);
+    const available = (category?.services || []).filter((service) => service.available !== false);
+    const service = available.find((entry) => String(entry.id) === String(draftCustomServiceId)) || available[0];
+    if (!service) { notify("No available services in this category. Ask a Manager or Admin to configure one."); return; }
+    const pricingUnit = String(service.pricingUnit || "Per item").trim();
+    const perKg = /kg/i.test(pricingUnit);
+    const qty = Math.min(perKg ? 200 : 100, Math.max(1, Number(draftCustomQty) || 1));
+    const lineName = `${category.name} — ${service.name}${pricingUnit ? ` (${pricingUnit})` : ""}`;
+    addDraftItem(lineName, qty, Number(service.price), perKg ? "kg" : "");
+  };
+
   // Combines the real Shop inventory with the Pricing tab's add-on catalog —
   // from a walk-in customer's point of view these are all just "things we can
   // sell them right now", so anything added or edited in either place should
@@ -1107,10 +1358,35 @@ export default function Admin() {
     addDraftItem(product.name, draftProductQty, product.price, "");
   };
 
-  const draftSubtotal = draftItems.reduce((s, i) => s + i.qty * i.price, 0);
+  const selectedDraftExpressService = expressServices.find(
+    (service) => String(service.id) === String(draftExItemId)
+  );
+  const isExpressLaundry =
+    draftCategory === "express" &&
+    /laundry/i.test(selectedDraftExpressService?.label || "");
+  const showDraftFulfilment =
+    draftCategory !== "express" || isExpressLaundry;
+  const effectiveDraftFulfilment =
+    showDraftFulfilment ? draftFulfilment : "dropoff";
+
+  const draftExpressGross = draftItems
+    .filter((item) => String(item.name || "").startsWith("Express: "))
+    .reduce((sum, item) => sum + item.qty * item.price, 0);
+  const draftRegularSubtotal = draftItems
+    .filter((item) => !String(item.name || "").startsWith("Express: "))
+    .reduce((sum, item) => sum + item.qty * item.price, 0);
+  const draftSubtotal = draftRegularSubtotal + draftExpressGross;
   const draftVat = draftSubtotal * VAT_RATE;
-  const draftTotal = draftSubtotal + draftVat + (draftType === "laundry" && draftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0);
+  const draftTotal = draftSubtotal + draftVat + (draftType === "laundry" && effectiveDraftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0);
   const draftShopTotal = draftSubtotal + draftVat; // shop checkout has no delivery-fee concept, just VAT on top
+  const draftDisplayTotals = roundedMoneyParts(
+    draftSubtotal,
+    draftVat,
+    draftType === "laundry" && effectiveDraftFulfilment === "pickup"
+      ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE)
+      : 0
+  );
+  const draftShopDisplayTotals = roundedMoneyParts(draftSubtotal, draftVat);
 
   const placeDraftLaundryOrder = async () => {
     if (draftItems.length === 0) { notify("Add at least one item first"); return; }
@@ -1118,21 +1394,22 @@ export default function Admin() {
     const localOrder = {
       id: genRef("LND"),
       items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price, unit: i.unit })),
-      fulfilment: draftFulfilment, address: draftAddress, date: "", time: "",
+      fulfilment: effectiveDraftFulfilment, address: effectiveDraftFulfilment === "pickup" ? draftAddress : "", date: "", time: "",
       payment: "walk-in", paymentStatus: "Pending", transferNote: "",
       fullName: draftFullName.trim(), phone: draftPhone.trim(), email: draftEmail.trim(),
+      description: draftDescription.trim(),
       placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
-      deliveryFee: draftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0,
+      deliveryFee: effectiveDraftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0,
       total: draftTotal, status: "Received",
     };
     setPlacingDraft(true);
     try {
       const saved = await createOrder({
         items: draftItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, price: i.price })),
-        fulfilment: draftFulfilment, address: draftAddress,
-        paymentMethod: "walk-in", deliveryFee: draftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0, total: draftTotal,
+        fulfilment: effectiveDraftFulfilment, address: effectiveDraftFulfilment === "pickup" ? draftAddress : "",
+        paymentMethod: "walk-in", deliveryFee: effectiveDraftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0, total: draftTotal,
         fullName: draftFullName.trim(), phone: draftPhone.trim(), email: draftEmail.trim(),
-        createdBy: currentUser?.name,
+        description: draftDescription.trim(), createdBy: currentUser?.name,
       });
       setLaundryOrders((os) => [saved, ...os]);
       notify(`Walk-in order ${saved.id || saved.referenceId} placed`);
@@ -1166,6 +1443,7 @@ export default function Admin() {
       const localBooking = {
         id: genRef("CLN"),
         service: draftServiceId.trim(), size: draftSizeId.trim(),
+        description: draftDescription.trim(),
         date: draftBookingDate, time: draftBookingTime, address: draftAddress.trim(),
         fullName: draftFullName.trim(), phone: draftPhone.trim(), email,
         price: payable, payType: "full", payable,
@@ -1190,6 +1468,7 @@ export default function Admin() {
       id: genRef("SHOP"),
       items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
       fullName: draftFullName.trim(), phone: draftPhone.trim(), mode: draftMode,
+      description: draftDescription.trim(),
       total: draftShopTotal, status: "Received", paymentStatus: "Pending",
       placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
     };
@@ -1198,7 +1477,7 @@ export default function Admin() {
       const saved = await createShopOrder({
         items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
         fullName: draftFullName.trim(), phone: draftPhone.trim(), mode: draftMode,
-        total: draftShopTotal, createdBy: currentUser?.name,
+        description: draftDescription.trim(), total: draftShopTotal, createdBy: currentUser?.name,
       });
       setShopOrders((os) => [saved, ...os]);
       notify(`Walk-in sale ${saved.id || saved.referenceId} placed`);
@@ -1221,8 +1500,8 @@ export default function Admin() {
         q.service,
         q.turnaround === "same-day" ? "Same day Express" :
           q.turnaround === "next-day" ? "Next day Express" : q.turnaround,
-        q.description,
       ].filter(Boolean).join(" · "),
+      description: q.description || "",
       total: q.quotedPrice,
       status: q.status || "Pending Quote",
       paymentStatus: "Not paid — quote only",
@@ -1231,15 +1510,20 @@ export default function Admin() {
     ...laundryOrders.map((o) => ({
       key: `L-${o.id}`, type: "Laundry", ref: o.id, placedAt: o.placedAt, name: o.fullName, phone: o.phone, email: o.email,
       details: o.items ? o.items.map((i) => `${i.name} ×${i.qty}${i.unit || ""}`).join(", ") : "—",
+      description: o.description || "",
       total: o.total, status: o.status, paymentStatus: o.paymentStatus, record: o,
     })),
     ...bookings.map((b) => ({
       key: `C-${b.id}`, type: "Cleaning", ref: b.id, placedAt: b.placedAt, name: b.fullName, phone: b.phone, email: b.email,
-      details: `${b.service} · ${b.size}`, total: b.payable, status: b.status, paymentStatus: b.paymentStatus, record: b,
+      details: `${b.service} · ${b.size}`,
+      description: b.description || "",
+      total: b.payable, status: b.status, paymentStatus: b.paymentStatus, record: b,
     })),
     ...shopOrders.map((o) => ({
       key: `S-${o.id}`, type: "Shop", ref: o.id, placedAt: o.placedAt, name: o.fullName, phone: o.phone, email: "",
-      details: o.items.map((i) => `${i.name} ×${i.qty}`).join(", "), total: o.total, status: o.status, paymentStatus: o.paymentStatus, record: o,
+      details: o.items.map((i) => `${i.name} ×${i.qty}`).join(", "),
+      description: o.description || "",
+      total: o.total, status: o.status, paymentStatus: o.paymentStatus, record: o,
     })),
     ...subscriptionPurchases.map((purchase) => ({
       key: `SUB-${purchase.dbId || purchase.id}`,
@@ -1274,7 +1558,7 @@ export default function Admin() {
     .filter((r) => {
       const q = historyQuery.trim().toLowerCase();
       if (!q) return true;
-      return [r.ref, r.name, r.phone, r.email, r.details].join(" ").toLowerCase().includes(q);
+      return [r.ref, r.name, r.phone, r.email, r.details, r.description].join(" ").toLowerCase().includes(q);
     })
     .sort((a, b) => new Date(b.placedAt || 0) - new Date(a.placedAt || 0));
 
@@ -1404,9 +1688,9 @@ export default function Admin() {
               <div className="rw-card" style={{ marginBottom: 20, background: "var(--ice)" }}>
                 <h3 style={{ fontSize: 15, marginBottom: 12 }}>Laundry Order — Draft</h3>
                 <div className="rw-pill-group" style={{ marginBottom: 14 }}>
-                  {["selfwash", "staffwash", "dryclean", "shoecare", "express", "shop"].map((c) => (
+                  {["selfwash", "staffwash", "dryclean", "shoecare", "express", ...customServiceCategories.map((category) => `custom:${category.name}`), "shop"].map((c) => (
                     <button key={c} className={`rw-pill ${draftCategory === c ? "active" : ""}`} onClick={() => setDraftCategory(c)}>
-                      {{ selfwash: "Self Wash", staffwash: "Staff Wash", dryclean: "Dry Cleaning", shoecare: "Shoe Care", express: "Express", shop: "Shop Products" }[c]}
+                      {c.startsWith("custom:") ? c.slice(7) : ({ selfwash: "Self Wash", staffwash: "Staff Wash", dryclean: "Dry Cleaning", shoecare: "Shoe Care", express: "Express", shop: "Shop Products" }[c])}
                     </button>
                   ))}
                 </div>
@@ -1490,58 +1774,158 @@ export default function Admin() {
 
                 {draftCategory === "express" && (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
-                    <div style={{ flex: "1 1 220px" }}>
-                      <label>Express service</label>
-                      <select
-                        value={draftExItemId}
-                        onChange={(e) => {
-                          const nextId = e.target.value;
-                          const nextItem = expressServices.find((i) => String(i.id) === String(nextId));
-                          setDraftExItemId(nextId);
-                          setDraftExQty((q) => Math.min(
-                            /laundry/i.test(nextItem?.label || "") ? 200 : 100,
-                            Math.max(1, Number(q) || 1)
-                          ));
-                        }}
-                      >
-                        {expressServices.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
-                      </select>
-                    </div>
-                    <div style={{ flex: "1 1 150px" }}>
-                      <label>Turnaround</label>
-                      <select value={draftExTurnaround} onChange={(e) => setDraftExTurnaround(e.target.value)}>
-                        <option value="same-day">Same day</option>
-                        <option value="next-day">Next day</option>
-                      </select>
-                    </div>
-                    <div style={{ flex: "1 1 180px" }}>
-                      <label>{/laundry/i.test(expressServices.find((i) => String(i.id) === String(draftExItemId))?.label || "") ? "Price per KG (₦)" : "Price (₦)"}</label>
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        inputMode="decimal"
-                        value={draftExPrice}
-                        onChange={(e) => setDraftExPrice(e.target.value)}
-                        placeholder="Enter price"
-                      />
-                    </div>
-                    <div>
-                      <label>{/laundry/i.test(expressServices.find((i) => String(i.id) === String(draftExItemId))?.label || "") ? "Weight (KG)" : "Qty"}</label>
-                      <div className="rw-stepper">
-                        <button type="button" aria-label="Decrease quantity" onClick={() => setDraftExQty((q) => Math.max(1, (Number(q) || 1) - 1))}><Minus size={15} /></button>
-                        <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>
-                          {Math.min(
-                            /laundry/i.test(expressServices.find((i) => String(i.id) === String(draftExItemId))?.label || "") ? 200 : 100,
-                            Math.max(1, Number(draftExQty) || 1)
+                    {(() => {
+                      const availableServices = expressServices.filter(
+                        (service) => service.available !== false
+                      );
+                      const selected = availableServices.find(
+                        (service) => String(service.id) === String(draftExItemId)
+                      );
+                      const options = getExpressPricingOptions(selected);
+                      const selectedOption = options.find(
+                        (option, index) =>
+                          getExpressOptionKey(option, index) === String(draftExOptionId)
+                      );
+                      const isPerKg = isExpressPerKg(selectedOption?.pricingUnit);
+                      const maxQuantity = isPerKg ? 200 : 100;
+                      const quantity = Math.min(
+                        maxQuantity,
+                        Math.max(1, Number(draftExQty) || 1)
+                      );
+
+                      return (
+                        <>
+                          <div style={{ flex: "1 1 220px" }}>
+                            <label>Express service</label>
+                            <select
+                              value={selected ? String(selected.id) : ""}
+                              onChange={(e) => {
+                                const nextItem = availableServices.find(
+                                  (service) => String(service.id) === String(e.target.value)
+                                );
+                                const nextOptions = getExpressPricingOptions(nextItem);
+                                setDraftExItemId(e.target.value);
+                                setDraftExOptionId(
+                                  nextOptions.length ? getExpressOptionKey(nextOptions[0], 0) : ""
+                                );
+                                setDraftExQty(1);
+                              }}
+                            >
+                              {availableServices.length === 0 ? (
+                                <option value="">No available Express services</option>
+                              ) : (
+                                availableServices.map((service) => (
+                                  <option key={service.id} value={service.id}>
+                                    {service.label}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          </div>
+
+                          <div style={{ flex: "1 1 145px" }}>
+                            <label>Turnaround</label>
+                            <div style={{ padding: "9px 10px", minHeight: 38, border: "1px solid var(--line)", borderRadius: 6, fontSize: 13 }}>
+                              {selectedOption?.turnaround || "—"}
+                            </div>
+                          </div>
+
+                          <div style={{ flex: "1 1 150px" }}>
+                            <label>
+                              Configured price
+                            </label>
+                            <div style={{ padding: "9px 10px", minHeight: 38, border: "1px solid var(--line)", borderRadius: 6, fontSize: 13, fontWeight: 700 }}>
+                              {selectedOption ? money(selectedOption.price) : "—"}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label>{isPerKg ? "Weight (KG)" : "Jobs"}</label>
+                            <div className="rw-stepper">
+                              <button
+                                type="button"
+                                aria-label="Decrease quantity"
+                                disabled={!selectedOption}
+                                onClick={() => setDraftExQty((q) => Math.max(1, (Number(q) || 1) - 1))}
+                              >
+                                <Minus size={15} />
+                              </button>
+                              <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>
+                                {quantity}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label="Increase quantity"
+                                disabled={!selectedOption}
+                                onClick={() => setDraftExQty((q) => Math.min(maxQuantity, (Number(q) || 1) + 1))}
+                              >
+                                <Plus size={15} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {!selected && (
+                            <p style={{ width: "100%", margin: 0, fontSize: 12.5, color: "var(--ink-soft)" }}>
+                              No Express services are currently available. Ask a Manager or Admin to configure one.
+                            </p>
                           )}
-                        </span>
-                        <button type="button" aria-label="Increase quantity" onClick={() => setDraftExQty((q) => Math.min(/laundry/i.test(expressServices.find((i) => String(i.id) === String(draftExItemId))?.label || "") ? 200 : 100, (Number(q) || 1) + 1))}><Plus size={15} /></button>
-                      </div>
-                    </div>
-                    <button className="rw-btn rw-btn-primary rw-btn-sm" onClick={addDraftExpressLine}><Plus size={13} /> Add</button>
+                          {selected && options.length === 0 && (
+                            <p style={{ width: "100%", margin: 0, fontSize: 12.5, color: "var(--ink-soft)" }}>
+                              This service has no available pricing options. Ask a Manager or Admin to enable an option.
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
+                    <button
+                      className="rw-btn rw-btn-primary rw-btn-sm"
+                      disabled={!expressServices.some(
+                        (service) =>
+                          String(service.id) === String(draftExItemId) &&
+                          service.available !== false &&
+                          getExpressPricingOptions(service).some(
+                            (option, index) =>
+                              getExpressOptionKey(option, index) === String(draftExOptionId)
+                          )
+                      )}
+                      onClick={addDraftExpressLine}
+                    >
+                      <Plus size={13} /> Add
+                    </button>
                   </div>
                 )}
+                {draftCategory.startsWith("custom:") && (() => {
+                  const categoryName = draftCategory.slice("custom:".length);
+                  const category = customServiceCategories.find((entry) => entry.name === categoryName);
+                  const available = (category?.services || []).filter((service) => service.available !== false);
+                  const selected = available.find((service) => String(service.id) === String(draftCustomServiceId)) || available[0];
+                  const perKg = /kg/i.test(String(selected?.pricingUnit || ""));
+                  const quantity = Math.min(perKg ? 200 : 100, Math.max(1, Number(draftCustomQty) || 1));
+                  return (
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+                      <div style={{ flex: "1 1 240px" }}>
+                        <label>{categoryName} service</label>
+                        <select value={selected ? String(selected.id) : ""} onChange={(e) => { setDraftCustomServiceId(e.target.value); setDraftCustomQty(1); }}>
+                          {available.length ? available.map((service) => <option key={service.id} value={service.id}>{service.name} · {money(service.price)} / {service.pricingUnit || "unit"}</option>) : <option value="">No available services</option>}
+                        </select>
+                      </div>
+                      <div style={{ flex: "1 1 180px" }}>
+                        <label>Configured price</label>
+                        <div style={{ padding: "9px 10px", minHeight: 38, border: "1px solid var(--line)", borderRadius: 6, fontWeight: 700 }}>{selected ? `${money(selected.price)} / ${selected.pricingUnit || "unit"}` : "—"}</div>
+                      </div>
+                      <div>
+                        <label>{perKg ? "Weight (KG)" : "Quantity"}</label>
+                        <div className="rw-stepper">
+                          <button type="button" aria-label="Decrease quantity" disabled={!selected} onClick={() => setDraftCustomQty((q) => Math.max(1, (Number(q) || 1) - 1))}><Minus size={15} /></button>
+                          <span style={{ fontWeight: 700, minWidth: 30, textAlign: "center" }}>{quantity}{perKg ? " kg" : ""}</span>
+                          <button type="button" aria-label="Increase quantity" disabled={!selected} onClick={() => setDraftCustomQty((q) => Math.min(perKg ? 200 : 100, (Number(q) || 1) + 1))}><Plus size={15} /></button>
+                        </div>
+                      </div>
+                      <button className="rw-btn rw-btn-primary rw-btn-sm" disabled={!selected} onClick={addDraftCustomServiceLine}><Plus size={13} /> Add</button>
+                      {!selected && <p style={{ width: "100%", margin: 0, fontSize: 12.5, color: "var(--ink-soft)" }}>Ask a Manager or Admin to add or enable a service in this category.</p>}
+                    </div>
+                  );
+                })()}
                 {draftCategory === "shop" && (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
                     <div style={{ flex: "1 1 220px" }}>
@@ -1588,22 +1972,30 @@ export default function Admin() {
                   <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} placeholder="0803 123 4567" /></div>
                   <div><label>Email (optional)</label><input type="email" autoComplete="email" value={draftEmail} onChange={(e) => setDraftEmail(e.target.value)} placeholder="customer@example.com" /></div>
                 </div>
-                <div className="rw-pill-group" style={{ marginBottom: 12 }}>
-                  <button className={`rw-pill ${draftFulfilment === "dropoff" ? "active" : ""}`} onClick={() => setDraftFulfilment("dropoff")}>Drop-off in store</button>
-                  <button className={`rw-pill ${draftFulfilment === "pickup" ? "active" : ""}`} onClick={() => setDraftFulfilment("pickup")}>Pickup & deliver (from {money(DELIVERY_FEE)})</button>
-                </div>
-                {draftFulfilment === "pickup" && (
+                <div style={{ marginBottom: 12 }}><label>Description (optional)</label><textarea rows={2} maxLength={1000} value={draftDescription} onChange={(e) => setDraftDescription(e.target.value)} placeholder="e.g. White shirts — please remove collar stains." /></div>
+                {showDraftFulfilment && (
                   <>
-                    <div style={{ marginBottom: 12 }}><label>Address</label><input value={draftAddress} onChange={(e) => setDraftAddress(e.target.value)} /></div>
-                    <div style={{ marginBottom: 12 }}><label>Pickup & delivery fee (minimum {money(DELIVERY_FEE)}; staff can adjust for distance)</label><input type="number" min={DELIVERY_FEE} step="100" value={draftDeliveryFee} onChange={(e) => setDraftDeliveryFee(Math.max(DELIVERY_FEE, Number(e.target.value) || DELIVERY_FEE))} /></div>
+                    <div className="rw-pill-group" style={{ marginBottom: 12 }}>
+                      <button className={`rw-pill ${draftFulfilment === "dropoff" ? "active" : ""}`} onClick={() => setDraftFulfilment("dropoff")}>Drop-off in store</button>
+                      <button className={`rw-pill ${draftFulfilment === "pickup" ? "active" : ""}`} onClick={() => setDraftFulfilment("pickup")}>Pickup & deliver (from {money(DELIVERY_FEE)})</button>
+                    </div>
+                    {effectiveDraftFulfilment === "pickup" && (
+                      <>
+                        <div style={{ marginBottom: 12 }}><label>Address</label><input value={draftAddress} onChange={(e) => setDraftAddress(e.target.value)} /></div>
+                        <div style={{ marginBottom: 12 }}><label>Pickup & delivery fee (minimum {money(DELIVERY_FEE)}; staff can adjust for distance)</label><input type="number" min={DELIVERY_FEE} step="100" value={draftDeliveryFee} onChange={(e) => setDraftDeliveryFee(Math.max(DELIVERY_FEE, Number(e.target.value) || DELIVERY_FEE))} /></div>
+                      </>
+                    )}
                   </>
                 )}
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
                   <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>
-                    Subtotal {money(draftSubtotal)} + VAT ({VAT_RATE * 100}%) {money(draftVat)}
+                    <div>Subtotal {money(draftDisplayTotals.subtotal)} + VAT ({VAT_RATE * 100}%) {money(draftDisplayTotals.vat)}</div>
+                    {effectiveDraftFulfilment === "pickup" && (
+                      <div>Delivery fee {money(draftDisplayTotals.other)}</div>
+                    )}
                   </div>
-                  <b style={{ fontSize: 15 }}>Total: {money(draftTotal)}</b>
+                  <b style={{ fontSize: 15 }}>Total: {money(draftDisplayTotals.total)}</b>
                   <button className="rw-btn rw-btn-rainbow" onClick={placeDraftLaundryOrder}>Place Order</button>
                 </div>
               </div>
@@ -1618,7 +2010,7 @@ export default function Admin() {
                     <td>{formatPlacedAt(o.placedAt)}</td>
                     <td>{o.fullName || "—"}</td>
                     <td style={{ maxWidth: 220, fontSize: 13 }}>{o.items ? o.items.map((i) => `${i.name} ×${i.qty}${i.unit || ""}`).join(", ") : "—"}</td>
-                    <td style={{ textTransform: "capitalize" }}>{o.fulfilment || "—"}</td>
+                    <td>{o.fulfilment === "pickup" ? "Pickup & deliver" : o.fulfilment === "dropoff" ? "Drop-off in store" : "—"}</td>
                     <td>{o.phone || "—"}</td>
                     <td>{o.email || "—"}</td>
                     <td>
@@ -1703,6 +2095,7 @@ export default function Admin() {
                     <label>Confirmed price (₦)</label>
                     <input type="number" step="500" placeholder="0" value={draftPayable} onChange={(e) => setDraftPayable(e.target.value)} />
                   </div>
+                  <div style={{ gridColumn: "1 / -1" }}><label>Description (optional)</label><textarea rows={2} maxLength={1000} value={draftDescription} onChange={(e) => setDraftDescription(e.target.value)} placeholder="e.g. Clean inside kitchen cabinets too." /></div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <button className="rw-btn rw-btn-rainbow" onClick={placeDraftBooking} disabled={placingDraft}>
@@ -1827,6 +2220,7 @@ export default function Admin() {
                   <div><label>Customer name</label><input value={draftFullName} onChange={(e) => setDraftFullName(e.target.value)} /></div>
                   <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} /></div>
                 </div>
+                <div style={{ marginBottom: 12 }}><label>Description (optional)</label><textarea rows={2} maxLength={1000} value={draftDescription} onChange={(e) => setDraftDescription(e.target.value)} placeholder="e.g. Please pack each item separately." /></div>
                 <div className="rw-pill-group" style={{ marginBottom: 12 }}>
                   <button className={`rw-pill ${draftMode === "pickup" ? "active" : ""}`} onClick={() => setDraftMode("pickup")}>Pickup in store</button>
                   <button className={`rw-pill ${draftMode === "delivery" ? "active" : ""}`} onClick={() => setDraftMode("delivery")}>Delivery</button>
@@ -1834,9 +2228,9 @@ export default function Admin() {
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>
-                    Subtotal {money(draftSubtotal)} + VAT ({VAT_RATE * 100}%) {money(draftVat)}
+                    Subtotal {money(draftShopDisplayTotals.subtotal)} + VAT ({VAT_RATE * 100}%) {money(draftShopDisplayTotals.vat)}
                   </div>
-                  <b style={{ fontSize: 15 }}>Total: {money(draftShopTotal)}</b>
+                  <b style={{ fontSize: 15 }}>Total: {money(draftShopDisplayTotals.total)}</b>
                   <button className="rw-btn rw-btn-rainbow" onClick={placeDraftShopOrder}>Place Order</button>
                 </div>
               </div>
@@ -1851,7 +2245,7 @@ export default function Admin() {
                     <td>{formatPlacedAt(o.placedAt)}</td>
                     <td>{o.fullName || "—"}</td>
                     <td>{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</td>
-                    <td style={{ textTransform: "capitalize" }}>{o.mode}</td>
+                    <td>{o.mode === "pickup" ? "Pickup in store" : o.mode === "delivery" ? "Delivery" : "—"}</td>
                     <td>{o.phone || "—"}</td>
                     <td>{money(o.total)}</td>
                     <td>
@@ -1908,7 +2302,7 @@ export default function Admin() {
             </div>
 
             <table className="rw-table">
-              <thead><tr><th>Type</th><th>Ref</th><th>Placed</th><th>Name</th><th>Phone</th><th>Email</th><th>Details</th><th>Total</th><th>Status</th><th>Payment</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Type</th><th>Ref</th><th>Placed</th><th>Name</th><th>Phone</th><th>Email</th><th>Items / Service</th><th>Description</th><th>Total</th><th>Status</th><th>Payment</th><th>Actions</th></tr></thead>
               <tbody>
                 {historyRows.map((r) => (
                   <tr key={r.key}>
@@ -1918,7 +2312,8 @@ export default function Admin() {
                     <td>{r.name || "—"}</td>
                     <td>{r.phone || "—"}</td>
                     <td>{r.email || "—"}</td>
-                    <td>{r.details}</td>
+                    <td>{r.details || "—"}</td>
+                    <td>{r.description || "—"}</td>
                     <td>
                       {r.type === "Express Quote" && r.total == null
                         ? "Awaiting quote" : money(r.total)}
@@ -1990,7 +2385,7 @@ export default function Admin() {
                   </tr>
                 ))}
                 {historyRows.length === 0 && (
-                  <tr><td colSpan={11} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No records match that search and time range.</td></tr>
+                  <tr><td colSpan={12} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No records match that search and time range.</td></tr>
                 )}
               </tbody>
             </table>
@@ -2158,13 +2553,377 @@ export default function Admin() {
 
             <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><Zap size={15} /> Express Services</h3>
             <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -4, marginBottom: 10 }}>
-              Express prices are quoted individually. Confirm the customer's quote before payment.
+              Configure each Express service and its pricing options. Turnaround labels, pricing units, prices and availability are editable. Staff can select the configured options for walk-in orders.
             </p>
-            <ul style={{ margin: "0 0 10px", paddingLeft: 22 }}>
-              {expressServices.map((r) => (
-                <li key={r.id} style={{ marginBottom: 6 }}>{r.label}</li>
-              ))}
-            </ul>
+            <table className="rw-table" style={{ marginBottom: 10 }}>
+              <thead>
+                <tr>
+                  <th>Service Name</th>
+                  <th>Description</th>
+                  <th>Pricing Options</th>
+                  <th>Service Available</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {expressServices.map((r) => {
+                  const savedOptions = pricingValue(r, "expressPricingOptions", "Express");
+                  const serviceOptions =
+                    Array.isArray(savedOptions) && savedOptions.length
+                      ? savedOptions
+                      : [{
+                          turnaround: pricingValue(r, "turnaround", "Express") || "Same-day",
+                          pricingUnit: pricingValue(r, "pricingUnit", "Express") || "Per job",
+                          price: pricingValue(r, "price", "Express"),
+                          available: true,
+                        }];
+
+                  return (
+                    <tr
+                      key={r.id}
+                      onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget)) {
+                          savePricingItem(r, "Express", ["label", "description", "available", "expressPricingOptions"]);
+                        }
+                      }}
+                    >
+                      <td style={{ minWidth: 160 }}>
+                        <input
+                          style={{ width: 150, padding: "6px 8px" }}
+                          value={pricingValue(r, "label", "Express")}
+                          onChange={(e) => updateExpress(r.id, "label", e.target.value)}
+                          placeholder="Service name"
+                        />
+                      </td>
+                      <td style={{ minWidth: 220 }}>
+                        <input
+                          aria-label="Express service description"
+                          style={{ width: "100%", minWidth: 190, padding: "6px 8px" }}
+                          value={pricingValue(r, "description", "Express") ?? ""}
+                          onChange={(e) => updateExpress(r.id, "description", e.target.value)}
+                          placeholder="Service description"
+                        />
+                      </td>
+                      <td style={{ minWidth: 420 }}>
+                        <div style={{ display: "grid", gap: 10 }}>
+                          {serviceOptions.map((option, optionIndex) => (
+                            <div
+                              key={option.id ?? optionIndex}
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                alignItems: "center",
+                                gap: 7,
+                                padding: 8,
+                                border: "1px solid var(--line)",
+                                borderRadius: 6,
+                              }}
+                            >
+                              <input
+                                aria-label="Turnaround label"
+                                style={{ width: 125, padding: "6px 8px" }}
+                                value={option.turnaround ?? ""}
+                                onChange={(e) => updateExpress(
+                                  r.id,
+                                  "expressPricingOptions",
+                                  serviceOptions.map((current, index) =>
+                                    index === optionIndex
+                                      ? { ...current, turnaround: e.target.value }
+                                      : current
+                                  )
+                                )}
+                                placeholder="e.g. Same-day"
+                              />
+                              <input
+                                aria-label="Pricing unit"
+                                style={{ width: 115, padding: "6px 8px" }}
+                                value={option.pricingUnit ?? ""}
+                                onChange={(e) => updateExpress(
+                                  r.id,
+                                  "expressPricingOptions",
+                                  serviceOptions.map((current, index) =>
+                                    index === optionIndex
+                                      ? { ...current, pricingUnit: e.target.value }
+                                      : current
+                                  )
+                                )}
+                                placeholder="e.g. Per kg"
+                              />
+                              <input
+                                aria-label="Option price in naira"
+                                type="number"
+                                min="0.01"
+                                step="0.01"
+                                style={{ width: 115, padding: "6px 8px" }}
+                                value={option.price ?? ""}
+                                onChange={(e) => updateExpress(
+                                  r.id,
+                                  "expressPricingOptions",
+                                  serviceOptions.map((current, index) =>
+                                    index === optionIndex
+                                      ? { ...current, price: e.target.value }
+                                      : current
+                                  )
+                                )}
+                                placeholder="Price (₦)"
+                              />
+                              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={option.available !== false}
+                                  onChange={(e) => updateExpress(
+                                    r.id,
+                                    "expressPricingOptions",
+                                    serviceOptions.map((current, index) =>
+                                      index === optionIndex
+                                        ? { ...current, available: e.target.checked }
+                                        : current
+                                    )
+                                  )}
+                                />
+                                Available
+                              </label>
+                              <button
+                                type="button"
+                                className="rw-btn rw-btn-ghost rw-btn-sm"
+                                disabled={serviceOptions.length === 1}
+                                title={serviceOptions.length === 1 ? "At least one option is required" : "Remove option"}
+                                onClick={() => updateExpress(
+                                  r.id,
+                                  "expressPricingOptions",
+                                  serviceOptions.filter((_, index) => index !== optionIndex)
+                                )}
+                              >
+                                <Trash2 size={13} color="#e0473f" />
+                              </button>
+                            </div>
+                          ))}
+                          <div>
+                            <button
+                              type="button"
+                              className="rw-btn rw-btn-ghost rw-btn-sm"
+                              onClick={() => updateExpress(r.id, "expressPricingOptions", [
+                                ...serviceOptions,
+                                {
+                                  turnaround: "Same-day",
+                                  pricingUnit: "Per job",
+                                  price: "",
+                                  available: true,
+                                },
+                              ])}
+                            >
+                              <Plus size={13} /> Add pricing option
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}>
+                          <input
+                            type="checkbox"
+                            checked={pricingValue(r, "available", "Express") !== false}
+                            onChange={(e) => updateExpress(r.id, "available", e.target.checked)}
+                          />
+                          {pricingValue(r, "available", "Express") !== false ? "Active" : "Unavailable"}
+                        </label>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="rw-btn rw-btn-ghost rw-btn-sm"
+                          title="Delete Express service"
+                          onClick={() => deleteExpress(r.id)}
+                        >
+                          <Trash2 size={13} color="#e0473f" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                <tr>
+                  <td style={{ minWidth: 160 }}>
+                    <input
+                      placeholder="New service name"
+                      style={{ width: 150, padding: "6px 8px" }}
+                      value={newExpress.label}
+                      onChange={(e) => setNewExpress((s) => ({ ...s, label: e.target.value }))}
+                    />
+                  </td>
+                  <td style={{ minWidth: 220 }}>
+                    <input
+                      aria-label="New Express service description"
+                      style={{ width: "100%", minWidth: 190, padding: "6px 8px" }}
+                      value={newExpress.description}
+                      onChange={(e) => setNewExpress((s) => ({ ...s, description: e.target.value }))}
+                      placeholder="Service description"
+                    />
+                  </td>
+                  <td style={{ minWidth: 420 }}>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {(newExpress.options || []).map((option, optionIndex) => (
+                        <div
+                          key={optionIndex}
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                            gap: 7,
+                            padding: 8,
+                            border: "1px solid var(--line)",
+                            borderRadius: 6,
+                          }}
+                        >
+                          <input
+                            aria-label="New option turnaround"
+                            style={{ width: 125, padding: "6px 8px" }}
+                            value={option.turnaround}
+                            onChange={(e) => setNewExpress((s) => ({
+                              ...s,
+                              options: s.options.map((current, index) =>
+                                index === optionIndex
+                                  ? { ...current, turnaround: e.target.value }
+                                  : current
+                              ),
+                            }))}
+                            placeholder="e.g. Same-day"
+                          />
+                          <input
+                            aria-label="New option pricing unit"
+                            style={{ width: 115, padding: "6px 8px" }}
+                            value={option.pricingUnit}
+                            onChange={(e) => setNewExpress((s) => ({
+                              ...s,
+                              options: s.options.map((current, index) =>
+                                index === optionIndex
+                                  ? { ...current, pricingUnit: e.target.value }
+                                  : current
+                              ),
+                            }))}
+                            placeholder="e.g. Per kg"
+                          />
+                          <input
+                            aria-label="New option price in naira"
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            style={{ width: 115, padding: "6px 8px" }}
+                            value={option.price}
+                            onChange={(e) => setNewExpress((s) => ({
+                              ...s,
+                              options: s.options.map((current, index) =>
+                                index === optionIndex
+                                  ? { ...current, price: e.target.value }
+                                  : current
+                              ),
+                            }))}
+                            placeholder="Price (₦)"
+                          />
+                          <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+                            <input
+                              type="checkbox"
+                              checked={option.available !== false}
+                              onChange={(e) => setNewExpress((s) => ({
+                                ...s,
+                                options: s.options.map((current, index) =>
+                                  index === optionIndex
+                                    ? { ...current, available: e.target.checked }
+                                    : current
+                                ),
+                              }))}
+                            />
+                            Available
+                          </label>
+                          <button
+                            type="button"
+                            className="rw-btn rw-btn-ghost rw-btn-sm"
+                            disabled={newExpress.options.length === 1}
+                            title={newExpress.options.length === 1 ? "At least one option is required" : "Remove option"}
+                            onClick={() => setNewExpress((s) => ({
+                              ...s,
+                              options: s.options.filter((_, index) => index !== optionIndex),
+                            }))}
+                          >
+                            <Trash2 size={13} color="#e0473f" />
+                          </button>
+                        </div>
+                      ))}
+                      <div>
+                        <button
+                          type="button"
+                          className="rw-btn rw-btn-ghost rw-btn-sm"
+                          onClick={() => setNewExpress((s) => ({
+                            ...s,
+                            options: [
+                              ...s.options,
+                              {
+                                turnaround: "Same-day",
+                                pricingUnit: "Per job",
+                                price: "",
+                                available: true,
+                              },
+                            ],
+                          }))}
+                        >
+                          <Plus size={13} /> Add pricing option
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: "center", fontSize: 12, color: "var(--ink-soft)" }}>
+                    Active on creation
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="rw-btn rw-btn-primary rw-btn-sm"
+                      onClick={addExpress}
+                    >
+                      <Plus size={13} /> Add service
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8 }}>Custom Laundry Categories & Services</h3>
+            <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -4, marginBottom: 10 }}>
+              Create your own Laundry category by adding its first service. Each configured service appears as a selectable category/service in walk-in Laundry orders. Prices use the regular VAT calculation.
+            </p>
+            <div className="rw-form-grid" style={{ marginBottom: 18, alignItems: "end" }}>
+              <div><label>Category name</label><input placeholder="e.g. Curtain Cleaning" value={newCustomService.category} onChange={(e) => setNewCustomService((s) => ({ ...s, category: e.target.value }))} /></div>
+              <div><label>Service name</label><input placeholder="e.g. Standard curtain wash" value={newCustomService.name} onChange={(e) => setNewCustomService((s) => ({ ...s, name: e.target.value }))} /></div>
+              <div><label>Pricing unit</label><input placeholder="Per item, Per kg, Per job" value={newCustomService.pricingUnit} onChange={(e) => setNewCustomService((s) => ({ ...s, pricingUnit: e.target.value }))} /></div>
+              <div><label>Price (₦)</label><input type="number" min="0.01" step="0.01" placeholder="Price" value={newCustomService.price} onChange={(e) => setNewCustomService((s) => ({ ...s, price: e.target.value }))} /></div>
+              <div style={{ gridColumn: "1 / -1" }}><label>Service description (optional)</label><input maxLength={1000} placeholder="Describe what this service includes" value={newCustomService.description} onChange={(e) => setNewCustomService((s) => ({ ...s, description: e.target.value }))} /></div>
+              <button className="rw-btn rw-btn-primary" onClick={addCustomService}><Plus size={14} /> Add Service / Category</button>
+            </div>
+            {customServiceCategories.map((category) => (
+              <div key={category.name} style={{ marginBottom: 20 }}>
+                <h4 style={{ fontSize: 14, color: "var(--blue)", marginBottom: 8 }}>{category.name}</h4>
+                <table className="rw-table" style={{ marginBottom: 8 }}>
+                  <thead><tr><th>Service</th><th>Description</th><th>Pricing unit</th><th>Price (₦)</th><th>Available</th><th></th></tr></thead>
+                  <tbody>
+                    {category.services.map((service) => {
+                      const draft = customServiceDrafts[service.id] || {};
+                      const value = (field) => draft[field] ?? service[field] ?? "";
+                      const change = (field, next) => setCustomServiceDrafts((items) => ({ ...items, [service.id]: { ...(items[service.id] || {}), [field]: next } }));
+                      return (
+                        <tr key={service.id} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) saveCustomService(service); }}>
+                          <td><input style={{ width: 150, padding: "6px 8px" }} value={value("name")} onChange={(e) => change("name", e.target.value)} /></td>
+                          <td><input style={{ width: 180, padding: "6px 8px" }} value={value("description")} onChange={(e) => change("description", e.target.value)} /></td>
+                          <td><input style={{ width: 110, padding: "6px 8px" }} value={value("pricingUnit")} onChange={(e) => change("pricingUnit", e.target.value)} /></td>
+                          <td><input type="number" min="0.01" step="0.01" style={{ width: 105, padding: "6px 8px" }} value={value("price")} onChange={(e) => change("price", e.target.value)} /></td>
+                          <td><input type="checkbox" checked={value("available") !== false} onChange={(e) => change("available", e.target.checked)} /></td>
+                          <td><button type="button" className="rw-btn rw-btn-ghost rw-btn-sm" title="Delete custom service" onClick={() => deleteCustomService(service)}><Trash2 size={13} color="#e0473f" /></button></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+            {customServiceCategories.length === 0 && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>No custom Laundry categories yet. Add the first service above to create one.</p>}
 
             <h3 style={{ fontSize: 16, marginTop: 24, marginBottom: 8 }}>Shop & Add-on Products</h3>
             <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -4, marginBottom: 10 }}>Grouped by category — Detergents, Starch, Bleach, Nylon, Bags, Extras.</p>

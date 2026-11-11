@@ -9,7 +9,7 @@ import {
   ADDON_GROUPS,
   DELIVERY_FEE, DELIVERY_COVERAGE_NOTE, buildWhatsAppLink, VAT_RATE,
 } from "../data/constants";
-import { money, genRef } from "../utils/format";
+import { money, genRef, roundedMoneyParts } from "../utils/format";
 import { useApp } from "../context/AppContext";
 
 const CATEGORIES = [
@@ -40,18 +40,25 @@ const CARE_TIPS = [
 
 function buildReceipt(order) {
   const itemLines = order.items.map((i) => `  • ${i.name} × ${i.qty}${i.unit ? i.unit : ""}, ${money(i.price * i.qty)}`).join("\n");
+  const subtotal = order.items.reduce((sum, item) => sum + item.qty * item.price, 0);
+  const vat = subtotal * VAT_RATE;
+  const deliveryFee = order.fulfilment === "pickup" ? DELIVERY_FEE : 0;
+  const displayTotals = roundedMoneyParts(subtotal, vat, deliveryFee);
   const lines = [
     "🧺 New Laundry Order, Rainbow Wash",
     `Ref: ${order.id}`,
     itemLines,
     `Fulfilment: ${order.fulfilment === "pickup" ? "Pickup & delivery" : "Drop off, in store"}`,
+    `Subtotal: ${money(displayTotals.subtotal)}`,
+    `VAT (7.5%): ${money(displayTotals.vat)}`,
+    `Delivery fee: ${deliveryFee ? money(displayTotals.other) : "—"}`,
   ];
   if (order.fulfilment === "pickup") {
     lines.push(`Address: ${order.address || "—"}`);
     lines.push(`Preferred: ${order.date || "—"} ${order.time || ""}`.trim());
   }
   lines.push(`Payment method: ${order.payment === "bank" ? "Bank Transfer" : order.payment === "pos" ? "POS" : order.payment}`);
-  lines.push(`Total: ${money(order.total)}`);
+  lines.push(`Total: ${money(displayTotals.total)}`);
   lines.push(`Customer name: ${order.fullName}`);
   lines.push(`Customer phone: ${order.phone}`);
   lines.push(`Customer email: ${order.email || "—"}`);
@@ -71,7 +78,6 @@ export default function OrderLaundry() {
   const [dcType, setDcType] = useState("regular");
   const [dcQty, setDcQty] = useState(1);
   const [exItemId, setExItemId] = useState(expressServices[0].id);
-  const [exTurnaround, setExTurnaround] = useState("same-day");
   const [exDescription, setExDescription] = useState("");
   const [expressRequest, setExpressRequest] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -149,9 +155,22 @@ export default function OrderLaundry() {
       notify("Please submit Express requests separately from priced laundry items.");
       return;
     }
+
+    const price = Number(item.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      notify("This Express service has no valid configured price. Please contact our team.");
+      return;
+    }
+
+    const pricingUnit = String(item.pricingUnit || "PER_JOB").toLowerCase().replace(/[^a-z]/g, "").includes("kg") ? "PER_KG" : "PER_JOB";
+    const turnaround = item.turnaround === "next-day" ? "Next-day Express" : "Same-day Express";
+
     setExpressRequest({
       service: item.label,
-      turnaround: exTurnaround,
+      serviceDescription: item.description || "",
+      turnaround,
+      price,
+      pricingUnit,
       description: exDescription.trim(),
     });
     notify("Express request details added. Enter your contact details and submit.");
@@ -166,10 +185,14 @@ export default function OrderLaundry() {
     addItem(name, scQty, price, "");
   };
 
+  const selectedExpressService = expressServices.find((item) => String(item.id) === String(exItemId));
+  const isExpressLaundry = /laundry/i.test(selectedExpressService?.label || "");
+
   const subtotal = items.reduce((s, i) => s + i.qty * i.price, 0);
   const vat = subtotal * VAT_RATE;
   const deliveryFee = fulfilment === "pickup" ? DELIVERY_FEE : 0;
   const total = subtotal + vat + deliveryFee;
+  const displayTotals = roundedMoneyParts(subtotal, vat, deliveryFee);
 
   const submit = () => {
     if (isSubmitting) return;
@@ -188,15 +211,35 @@ export default function OrderLaundry() {
         return;
       }
 
+      if (isExpressLaundry && fulfilment === "pickup" && (!address.trim() || !date || !time)) {
+        notify("For pickup and delivery, please provide your address, date, and time");
+        return;
+      }
+
+      const unitLabel = expressRequest.pricingUnit === "PER_KG" ? "per KG" : "per Job";
+      const fulfilmentDetails = isExpressLaundry
+        ? [
+            `Fulfilment: ${fulfilment === "pickup" ? "Pickup & delivery" : "In-store drop-off"}`,
+            `Delivery fee: ${money(fulfilment === "pickup" ? DELIVERY_FEE : 0)}`,
+            ...(fulfilment === "pickup" ? [
+              `Pickup / delivery address: ${address.trim()}`,
+              `Preferred date: ${date}`,
+              `Preferred time: ${time}`,
+            ] : []),
+          ]
+        : [];
       const message = [
         "⚡ New Express Quote Request, Rainbow Wash",
         `Service: ${expressRequest.service}`,
+        `Service details: ${expressRequest.serviceDescription || "—"}`,
         `Turnaround: ${expressRequest.turnaround}`,
-        `Description: ${expressRequest.description}`,
+        `Configured indicative price: ${money(expressRequest.price)} ${unitLabel}`,
+        ...fulfilmentDetails,
+        `Customer work description: ${expressRequest.description}`,
         `Customer name: ${fullName.trim()}`,
         `Customer phone: ${phone.trim()}`,
         `Customer email: ${email.trim() || "—"}`,
-        "Note: price to be confirmed by our team before payment.",
+        "Note: the displayed configured price is indicative. Our team must review and confirm the final quote before payment.",
       ].join("\n");
 
       setPlaced({
@@ -293,7 +336,7 @@ export default function OrderLaundry() {
             <div className="rw-card" style={{ marginBottom: 20 }}>
               <div className="rw-pill-group" style={{ marginBottom: 18 }}>
                 {CATEGORIES.map((c) => (
-                  <button key={c.id} className={`rw-pill ${category === c.id ? "active" : ""}`} onClick={() => setCategory(c.id)}>
+                  <button key={c.id} className={`rw-pill ${category === c.id ? "active" : ""}`} onClick={() => { setCategory(c.id); setExpressRequest(null); }}>
                     <c.icon size={13} style={{ marginRight: 5, verticalAlign: -2 }} />{c.label}
                   </button>
                 ))}
@@ -358,21 +401,54 @@ export default function OrderLaundry() {
               {category === "express" && (
                 <div>
                   <div className="rw-field">
-                    <label>Express turnaround</label>
+                    <label>Express service</label>
                     <select
-                      value={exTurnaround}
-                      onChange={(e) => setExTurnaround(e.target.value)}
+                      value={exItemId}
+                      onChange={(e) => {
+                        setExItemId(e.target.value);
+                        setExpressRequest(null);
+                      }}
                     >
-                      <option value="same-day">Same-day Express</option>
-                      <option value="next-day">Next-day Express</option>
+                      {expressServices.map((item) => (
+                        <option key={item.id} value={item.id}>{item.label}</option>
+                      ))}
                     </select>
                   </div>
+
+                  {(() => {
+                    const selected = expressServices.find((item) => String(item.id) === String(exItemId));
+                    const price = Number(selected?.price);
+                    const isValidPrice = Number.isFinite(price) && price > 0;
+                    const isPerKg = String(selected?.pricingUnit || "PER_JOB").toLowerCase().replace(/[^a-z]/g, "").includes("kg");
+
+                    return (
+                      <div className="rw-summary" style={{ marginBottom: 16 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                          {selected?.label || "Express service details"}
+                        </div>
+                        {selected?.description ? (
+                          <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6, marginBottom: 10 }}>
+                            {selected.description}
+                          </p>
+                        ) : null}
+                        <div className="rw-summary-row">
+                          <span>Turnaround</span>
+                          <strong>{selected?.turnaround === "next-day" ? "Next-day Express" : "Same-day Express"}</strong>
+                        </div>
+                        <div className="rw-summary-row">
+                          <span>Configured price</span>
+                          <strong>{isValidPrice ? `${money(price)} ${isPerKg ? "per KG" : "per Job"}` : "Price unavailable"}</strong>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div className="rw-field">
                     <label>Describe the work you need</label>
                     <textarea rows={3} placeholder="Describe the items and any special requests" value={exDescription} onChange={(e) => setExDescription(e.target.value)} />
                   </div>
                   <p style={{ fontSize: 12.5, color: "var(--blue)", fontWeight: 600, marginBottom: 14 }}>
-                    No preset price or quantity. Our team will confirm the price before payment.
+                    The configured price is indicative only. Our team will review your request and confirm the final quote before payment.
                   </p>
                   <button className="rw-btn rw-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={addExpressLine}>
                     <Plus size={15} /> Add to order
@@ -458,7 +534,9 @@ export default function OrderLaundry() {
             </div>
 
             <div className="rw-card">
-              <h3 style={{ marginBottom: 14 }}>Pickup, delivery & payment</h3>
+              <h3 style={{ marginBottom: 14 }}>{category === "express" ? (isExpressLaundry ? "Fulfilment & your contact details" : "Your contact details") : "Pickup, delivery & payment"}</h3>
+              {(category !== "express" || isExpressLaundry) && (
+                <>
               <div className="rw-field">
                 <label>Pickup & delivery</label>
                 <div className="rw-pill-group">
@@ -488,6 +566,8 @@ export default function OrderLaundry() {
                 </div>
               )}
 
+              {category !== "express" && (
+                <>
               <div className="rw-field">
                 <label>Payment method</label>
                 <div className="rw-pill-group">
@@ -541,6 +621,10 @@ export default function OrderLaundry() {
                   </p>
                 </div>
               )}
+                </>
+              )}
+                </>
+              )}
 
               <div className="rw-field">
                 <label><User size={13} style={{ verticalAlign: -2, marginRight: 5 }} />Full name</label>
@@ -559,7 +643,11 @@ export default function OrderLaundry() {
 
           <div className="rw-card rw-summary" style={{ position: "sticky", top: 90 }}>
             <h3 style={{ marginBottom: 14 }}>Your order</h3>
-            {items.length === 0 && <p style={{ fontSize: 14, color: "var(--ink-soft)" }}>Add items from the left to build your order.</p>}
+            {items.length === 0 && !expressRequest && (
+              <p style={{ fontSize: 14, color: "var(--ink-soft)" }}>
+                {category === "express" ? "Select an Express service and add your work description." : "Add items from the left to build your order."}
+              </p>
+            )}
             {items.map((i) => (
               <div key={i.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
                 <div style={{ flex: 1 }}>
@@ -574,10 +662,33 @@ export default function OrderLaundry() {
                 <button className="rw-icon-btn" onClick={() => removeItem(i.id)}><Trash2 size={14} color="#e0473f" /></button>
               </div>
             ))}
-            <div className="rw-summary-row" style={{ marginTop: 10 }}><span>Subtotal</span><span>{money(subtotal)}</span></div>
-            <div className="rw-summary-row"><span>VAT ({VAT_RATE * 100}%)</span><span>{money(vat)}</span></div>
-            <div className="rw-summary-row"><span>Delivery fee</span><span>{fulfilment === "pickup" ? money(deliveryFee) : "—"}</span></div>
-            <div className="rw-summary-row total"><span>Total</span><span>{money(total)}</span></div>
+            {expressRequest && (
+              <div className="rw-summary" style={{ marginTop: 12, marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>{expressRequest.service}</div>
+                <p style={{ fontSize: 12.5, color: "var(--ink-soft)", lineHeight: 1.6, marginBottom: 8 }}>
+                  {expressRequest.serviceDescription || "Express service"}
+                </p>
+                <div className="rw-summary-row">
+                  <span>Turnaround</span>
+                  <strong>{expressRequest.turnaround}</strong>
+                </div>
+                <div className="rw-summary-row">
+                  <span>Indicative rate</span>
+                  <strong>{money(expressRequest.price)} {expressRequest.pricingUnit === "PER_KG" ? "per KG" : "per Job"}</strong>
+                </div>
+                <p style={{ fontSize: 12.5, color: "var(--ink-soft)", lineHeight: 1.6, marginTop: 8 }}>
+                  Your work: {expressRequest.description}
+                </p>
+              </div>
+            )}
+            {category !== "express" && (
+              <>
+                <div className="rw-summary-row" style={{ marginTop: 10 }}><span>Subtotal</span><span>{money(displayTotals.subtotal)}</span></div>
+                <div className="rw-summary-row"><span>VAT ({VAT_RATE * 100}%)</span><span>{money(displayTotals.vat)}</span></div>
+                <div className="rw-summary-row"><span>Delivery fee</span><span>{fulfilment === "pickup" ? money(displayTotals.other) : "—"}</span></div>
+                <div className="rw-summary-row total"><span>Total</span><span>{money(displayTotals.total)}</span></div>
+              </>
+            )}
             <button type="button" className="rw-btn rw-btn-rainbow" style={{ width: "100%", justifyContent: "center", marginTop: 16 }} onClick={submit} disabled={isSubmitting}>
               <CreditCard size={16} /> {isSubmitting
               ? (expressRequest ? "Submitting quote request..." : "Placing order...")

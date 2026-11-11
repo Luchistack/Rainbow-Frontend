@@ -6,6 +6,21 @@ import {
 import { fetchCleaningServices, fetchBookings, fetchProducts, fetchOrders, fetchShopOrders, fetchSubscriptionPlans } from "../api/api";
 
 const CLEANING_PARENT_LABELS = ["Home Cleaning", "Office Cleaning", "Deep Cleaning", "Upholstery Cleaning"];
+const RESERVED_SERVICE_CATEGORIES = new Set([
+  "Self Wash", "Staff Wash", "Dry Cleaning", "Shoe Care", "Express",
+  ...ADDON_GROUPS, ...CLEANING_PARENT_LABELS,
+].map((name) => name.trim().toLowerCase()));
+
+function deriveCustomServiceCategories(allServices) {
+  const grouped = new Map();
+  allServices.forEach((service) => {
+    const category = String(service.category || "").trim();
+    if (!category || RESERVED_SERVICE_CATEGORIES.has(category.toLowerCase())) return;
+    if (!grouped.has(category.toLowerCase())) grouped.set(category.toLowerCase(), { name: category, services: [] });
+    grouped.get(category.toLowerCase()).services.push(service);
+  });
+  return Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
 
 // Every non-Shop price on the site (Self Wash, Staff Wash, Dry Cleaning, Shoe
 // Care, Express, Add-ons, and Cleaning Service sizes) now lives as one flat,
@@ -23,7 +38,24 @@ function deriveGroupedServices(allServices) {
   const staffWashRates = byCategory("Staff Wash").map((s) => ({ id: s.id, label: s.name, unit: "kg", price: s.price }));
   const dryCleanItems = byCategory("Dry Cleaning").map((s) => ({ id: s.id, label: s.name, regular: s.price, deep: s.deepPrice }));
   const shoeCareItems = byCategory("Shoe Care").map((s) => ({ id: s.id, label: s.name, regular: s.price, deep: s.deepPrice, repair: s.repairPrice }));
-  const expressServices = byCategory("Express").map((s) => ({ id: s.id, label: s.name, price: s.price }));
+  const expressServices = byCategory("Express").map((s) => ({
+    id: s.id,
+    label: s.name,
+    description: s.description || "",
+    price: s.price,
+    turnaround: s.turnaround || "same-day",
+    pricingUnit: s.pricingUnit || "PER_JOB",
+    available: s.available !== false,
+    expressPricingOptions: Array.isArray(s.expressPricingOptions)
+      ? s.expressPricingOptions.map((option) => ({
+          id: option.id,
+          turnaround: option.turnaround || "",
+          pricingUnit: option.pricingUnit || "",
+          price: option.price,
+          available: option.available !== false,
+        }))
+      : [],
+  }));
   const addonProducts = allServices
     .filter((s) => ADDON_GROUPS.includes(s.category))
     .map((s) => ({ id: s.id, label: s.name, price: s.price, group: s.category }));
@@ -184,6 +216,10 @@ export function AppProvider({ children }) {
   const {
     selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, expressServices, addonProducts, cleaningServices,
   } = useMemo(() => deriveGroupedServices(allServices), [allServices]);
+  const customServiceCategories = useMemo(
+    () => deriveCustomServiceCategories(allServices),
+    [allServices]
+  );
 
   const refreshServices = async () => {
     try {
@@ -362,6 +398,7 @@ export function AppProvider({ children }) {
     allServices, refreshServices,
     subscriptionPlans, refreshSubscriptionPlans,
     selfWashRates, staffWashRates, dryCleanItems, shoeCareItems, addonProducts, cleaningServices, expressServices,
+    customServiceCategories,
     laundryOrders, setLaundryOrders,
     bookings, setBookings,
     shopOrders, setShopOrders,

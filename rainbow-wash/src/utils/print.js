@@ -1,5 +1,11 @@
-import { money } from "./format";
+import { money, roundedMoneyParts } from "./format";
+import logoDataUrl from "../assets/logo.png?inline";
 import { BUSINESS_INFO, VAT_RATE, DELIVERY_FEE } from "../data/constants";
+
+const escapeHtml = (value) =>
+  String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]);
 
 function rowsForOrder(order, subtotal) {
   if (order.items && order.items.length) {
@@ -23,21 +29,35 @@ function computeTotals(order) {
     // `order.total` blindly. That was the actual bug: a walk-in order's total
     // had been saved without VAT ever added to it, so the receipt was just
     // faithfully repeating a wrong number instead of getting it right.
-    const itemsSubtotal = order.items.reduce((s, i) => s + i.qty * i.price, 0);
-    const vat = itemsSubtotal * VAT_RATE;
+    const expressGross = order.items
+      .filter((item) => String(item.name || "").startsWith("Express: "))
+      .reduce((sum, item) => sum + item.qty * item.price, 0);
+    const regularSubtotal = order.items
+      .filter((item) => !String(item.name || "").startsWith("Express: "))
+      .reduce((sum, item) => sum + item.qty * item.price, 0);
+    const subtotal = regularSubtotal + expressGross;
+    const vat = subtotal * VAT_RATE;
     const other = order.fulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(order.deliveryFee) || DELIVERY_FEE) : 0;
-    const total = itemsSubtotal + vat + other;
-    return { subtotal: itemsSubtotal, vat, other, total };
+    const total = subtotal + vat + other;
+    return roundedMoneyParts(subtotal, vat, other);
   }
   // Cleaning bookings: no item list, just a single confirmed/negotiated price.
   // That price is treated as the pre-VAT amount, VAT is added on top here.
   const subtotal = order.payable ?? order.price ?? order.total ?? 0;
   const vat = subtotal * VAT_RATE;
-  return { subtotal, vat, other: 0, total: subtotal + vat };
+  return roundedMoneyParts(subtotal, vat);
 }
 
 function plainTextLines(order, subtotal) {
   return rowsForOrder(order, subtotal).map((r) => `- ${r.desc} x${r.qty}: ${money(r.amount)}`);
+}
+
+function getFulfilmentLabel(order) {
+  if (order?.mode === "pickup") return "Pickup in store";
+  if (order?.mode === "delivery") return "Delivery";
+  if (order?.fulfilment === "pickup") return "Pickup & deliver";
+  if (order?.fulfilment === "dropoff") return "Drop-off in store";
+  return "";
 }
 
 function buildShareText(order) {
@@ -46,12 +66,14 @@ function buildShareText(order) {
 
   const lines = [
     BUSINESS_INFO.name,
-    ...BUSINESS_INFO.phones,
+    `☎ ${BUSINESS_INFO.phones[0]}`,
+    `WhatsApp: ${BUSINESS_INFO.phones[1]}`,
     BUSINESS_INFO.email,
     "",
     `Receipt: ${order.id}`,
     `Date: ${placedDate}`,
     `Customer: ${order.fullName || "Customer"}${order.phone ? " (" + order.phone + ")" : ""}`,
+    ...(order.description ? [`Description: ${order.description}`] : []),
     "",
     ...plainTextLines(order, subtotal),
     "",
@@ -79,7 +101,13 @@ const PRINT_SIZE_CSS = {
     body.size-thermal80 .biz { font-size: 14px; }
     body.size-thermal80 h1 { font-size: 15px; margin: 10px 0 4px; }
     body.size-thermal80 .meta { flex-direction: column; gap: 6px; padding: 8px; }
-    body.size-thermal80 .totals { width: 100%; }
+    body.size-thermal80 table { display: none; }
+    body.size-thermal80 .thermal-items { display: block; }
+    body.size-thermal80 .thermal-item { padding: 8px 1px; }
+    body.size-thermal80 .order-description { font-size: 10px; padding: 7px; }
+    body.size-thermal80 .totals { width: 100%; margin-left: 0; padding: 8px; }
+    body.size-thermal80 .totals div { gap: 8px; }
+    body.size-thermal80 .totals div span:last-child { text-align: right; white-space: nowrap; }
     body.size-thermal80 .print-rainbow-stripe { height: 4px; margin-bottom: 12px; }
   `,
   thermal58: `
@@ -88,8 +116,15 @@ const PRINT_SIZE_CSS = {
     body.size-thermal58 .contact { font-size: 9px; }
     body.size-thermal58 h1 { font-size: 12.5px; margin: 8px 0 3px; }
     body.size-thermal58 .meta { flex-direction: column; gap: 5px; padding: 6px; font-size: 9.5px; }
-    body.size-thermal58 table th, body.size-thermal58 table td { padding: 5px 3px; font-size: 9px; }
-    body.size-thermal58 .totals { width: 100%; padding: 6px 8px; }
+    body.size-thermal58 table { display: none; }
+    body.size-thermal58 .thermal-items { display: block; font-size: 9px; }
+    body.size-thermal58 .thermal-item { padding: 7px 0; }
+    body.size-thermal58 .thermal-detail { font-size: 8.5px; }
+    body.size-thermal58 .thermal-amount { font-size: 9px; }
+    body.size-thermal58 .order-description { font-size: 8.5px; padding: 5px; }
+    body.size-thermal58 .totals { width: 100%; margin-left: 0; padding: 6px; font-size: 9px; }
+    body.size-thermal58 .totals div { gap: 5px; }
+    body.size-thermal58 .totals div span:last-child { text-align: right; white-space: nowrap; }
     body.size-thermal58 .print-rainbow-stripe { height: 3px; margin-bottom: 10px; }
   `,
 };
@@ -117,7 +152,27 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     )
     .join("");
 
+  const thermalRowsHtml = rows
+    .map(
+      (r) => `
+      <div class="thermal-item">
+        <div class="thermal-desc">${r.desc}</div>
+        <div class="thermal-detail">
+          <span>Qty: ${r.qty}</span>
+          <span>Unit price: ${money(r.unitPrice)}</span>
+        </div>
+        <div class="thermal-amount">
+          <span>Amount</span>
+          <strong>${money(r.amount)}</strong>
+        </div>
+      </div>`
+    )
+    .join("");
+
   const otherRowHtml = other > 1 ? `<div><span>Delivery / Other</span><span>${money(other)}</span></div>` : "";
+  const descriptionHtml = order.description
+    ? `<div class="order-description"><strong>Description:</strong> ${escapeHtml(order.description)}</div>`
+    : "";
 
   // Pre-format every number the PDF script needs, out here where `money()` is
   // actually available, and pass the finished strings in — the popup window's
@@ -125,8 +180,10 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   // reformat currency itself.
   const pdfItems = rows.map((r) => ({ desc: r.desc, qty: r.qty, unitPrice: money(r.unitPrice), amount: money(r.amount) }));
   const pdfData = {
+    logoDataUrl,
     bizName: BUSINESS_INFO.name,
-    contactLine: BUSINESS_INFO.phones.join(" / "),
+    contactLine: BUSINESS_INFO.phones[0],
+    whatsappLine: BUSINESS_INFO.phones[1],
     email: BUSINESS_INFO.email,
     billTo: order.fullName || "Customer",
     phone: order.phone || "",
@@ -135,6 +192,7 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     status: order.status || "—",
     paymentMethod: order.paymentMethod || "—",
     paymentStatus: order.paymentStatus || "Pending",
+    description: order.description || "",
     items: pdfItems,
     subtotal: money(subtotal),
     vatLabel: `VAT (${VAT_RATE * 100}%)`,
@@ -179,8 +237,12 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   .print-rainbow-stripe span { flex: 1; }
 
   .head { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 20px; min-width: 0; }
+  .receipt-logo { display: block; width: 58px; height: auto; object-fit: contain; }
   .biz { font-weight: 800; font-size: 18px; color: #0c3f66; max-width: 100%; overflow-wrap: anywhere; line-height: 1.3; }
   .contact { text-align: left; font-size: 12px; color: #555; line-height: 1.6; overflow-wrap: anywhere; max-width: 100%; }
+  .contact-row { display: flex; align-items: center; gap: 6px; }
+  .contact-icon { width: 15px; text-align: center; font-size: 14px; }
+  .whatsapp-icon { width: 15px; height: 15px; flex: 0 0 15px; }
 
   h1 { font-size: 24px; margin: 18px 0 4px; color: #0c3f66; }
 
@@ -192,6 +254,14 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #0c3f66; border-bottom: 2px solid #27aae1; padding: 10px 8px; background: #eaf4fb; }
   td { padding: 10px 8px; border-bottom: 1px solid #eee; font-size: 13.5px; word-wrap: break-word; overflow-wrap: break-word; }
 
+  .thermal-items { display: none; width: 100%; margin-top: 12px; }
+  .thermal-item { width: 100%; min-width: 0; padding: 8px 2px; border-bottom: 1px solid #dce4eb; overflow-wrap: anywhere; }
+  .thermal-desc { font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+  .thermal-detail { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 3px 8px; margin-top: 5px; font-size: 0.92em; }
+  .thermal-amount { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 5px; font-weight: 700; }
+  .thermal-amount strong { text-align: right; white-space: nowrap; }
+
+  .order-description { margin-top: 14px; padding: 10px 12px; border: 1px solid #dce7ef; border-radius: 7px; background: #f8fbfd; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
   .totals { margin-top: 16px; width: 280px; margin-left: auto; font-size: 13.5px; background: #f4f8fb; padding: 10px 14px; border-radius: 8px; }
   .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
   .totals .grand { font-weight: 800; font-size: 16px; border-top: 2px solid #0c3f66; padding-top: 8px; margin-top: 6px; color: #0c3f66; }
@@ -225,9 +295,11 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   </div>
 
   <div class="head">
+    <img class="receipt-logo" src="${logoDataUrl}" alt="Rainbow Wash logo" />
     <div class="biz">${BUSINESS_INFO.name}</div>
     <div class="contact">
-      ${BUSINESS_INFO.phones.join("<br/>")}<br/>
+      <div class="contact-row"><span class="contact-icon">☎</span><span>${escapeHtml(BUSINESS_INFO.phones[0])}</span></div>
+      <div class="contact-row"><svg class="whatsapp-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#25D366" d="M12 2a10 10 0 0 0-8.66 15l-1.1 4.02 4.12-1.08A10 10 0 1 0 12 2Z"/><path fill="#fff" d="M8.1 6.8c-.3-.6-.6-.6-.9-.6h-.7c-.2 0-.6.1-.9.5-.3.3-1.1 1.1-1.1 2.7s1.1 3.1 1.3 3.3c.2.2 2.1 3.4 5.2 4.6 2.6 1 3.1.8 3.7.7.6-.1 1.9-.8 2.2-1.5.3-.7.3-1.3.2-1.5-.1-.1-.3-.2-.7-.4l-2.1-1c-.3-.1-.5-.2-.7.2-.2.3-.8 1-1 1.2-.2.2-.4.2-.7.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.7l.5-.6c.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5Z"/></svg><span>${escapeHtml(BUSINESS_INFO.phones[1])}</span></div>
       ${BUSINESS_INFO.email}
     </div>
   </div>
@@ -257,6 +329,12 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       ${tableRowsHtml}
     </tbody>
   </table>
+
+  <div class="thermal-items">
+    ${thermalRowsHtml}
+  </div>
+
+  ${descriptionHtml}
 
   <div class="totals">
     <div><span>Subtotal</span><span>${money(subtotal)}</span></div>
@@ -333,6 +411,7 @@ export function openPrintSlip(order, staffUser, onPrinted) {
         estimatedH += String(d.status || '').length * 2;
         estimatedH += String(d.paymentMethod || '').length * 2;
         estimatedH += String(d.paymentStatus || '').length * 2;
+        estimatedH += Math.ceil(String(d.description || '').length / (is80 ? 25 : 16)) * 12;
         (d.items || []).forEach(function (r) {
           estimatedH += 48 + Math.ceil(String(r.desc || '').length / (is80 ? 25 : 16)) * 12;
         });
@@ -366,6 +445,10 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       });
 
       y = small ? 19 : 36;
+      var logoW = small ? (is58 ? 16 : 20) : 30;
+      var logoH = logoW * 323 / 300;
+      doc.addImage(d.logoDataUrl, "PNG", left, y, logoW, logoH);
+      y += logoH + (small ? 4 : 6);
       doc.setFontSize(small ? (is58 ? 10 : 12) : 16);
       doc.setTextColor(12, 63, 102);
       doc.setFont(undefined, 'bold');
@@ -377,12 +460,29 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       doc.setTextColor(85, 85, 85);
       doc.setFont(undefined, 'normal');
 
-      var phoneLines = String(d.contactLine || '').split(' / ');
+      var phoneLines = ['☎ ' + String(d.contactLine || '')];
       phoneLines.forEach(function (phoneLine) {
         var lines = doc.splitTextToSize(phoneLine, contentW);
         doc.text(lines, left, y);
         y += lines.length * lineGap;
       });
+
+      // WhatsApp-style green chat circle with a white handset drawn as PDF vector strokes.
+      doc.setFillColor(37, 211, 102);
+      doc.circle(left + 4, y - 3, 4, 'F');
+      doc.setDrawColor(255, 255, 255);
+      doc.setLineWidth(1.2);
+      doc.line(left + 1.8, y - 4.8, left + 2.8, y - 5.8);
+      doc.line(left + 2.8, y - 5.8, left + 3.8, y - 4.7);
+      doc.line(left + 3.8, y - 4.7, left + 5.2, y - 3.3);
+      doc.line(left + 5.2, y - 3.3, left + 6.2, y - 2.2);
+      doc.line(left + 6.2, y - 2.2, left + 5.2, y - 1.2);
+      doc.setLineWidth(0.2);
+      doc.setTextColor(85, 85, 85);
+      doc.setFont(undefined, 'normal');
+      var whatsappLines = doc.splitTextToSize(String(d.whatsappLine || ''), contentW - 12);
+      doc.text(whatsappLines, left + 12, y);
+      y += whatsappLines.length * lineGap;
 
       var emailLines = doc.splitTextToSize(String(d.email || ''), contentW);
       doc.text(emailLines, left, y);
@@ -538,6 +638,20 @@ export function openPrintSlip(order, staffUser, onPrinted) {
         y += 8;
       }
 
+      if (String(d.description || '').trim()) {
+        y += small ? 4 : 10;
+        doc.setFontSize(small ? fontSmall : 9);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(12, 63, 102);
+        doc.text('DESCRIPTION', left, y);
+        y += small ? lineGap : 13;
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(40, 40, 40);
+        var detailLines = doc.splitTextToSize(String(d.description), contentW);
+        doc.text(detailLines, left, y);
+        y += detailLines.length * lineGap + (small ? 5 : 10);
+      }
+
       // Totals always fit the available paper width.
       y += small ? 5 : 12;
       var boxW = small ? contentW : Math.min(250, contentW);
@@ -679,8 +793,9 @@ export const openExpressQuotePrintSlip = (request, staffUser, onPrinted) => {
     new Intl.NumberFormat("en-NG", {
       style: "currency",
       currency: "NGN",
-      maximumFractionDigits: 2,
-    }).format(value);
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(Math.round(Number(value) || 0));
 
   const reference = request.id || request.referenceId || "—";
   const turnaround = ({

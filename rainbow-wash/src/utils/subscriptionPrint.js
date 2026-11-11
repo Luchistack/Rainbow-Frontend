@@ -1,4 +1,5 @@
 import { BUSINESS_INFO } from "../data/constants";
+import logoDataUrl from "../assets/logo.png?inline";
 
 const escapeHtml = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -56,7 +57,8 @@ export const openSubscriptionPrintSlip = (purchase, staffUser, onPrinted) => {
   const companyName = escapeHtml(BUSINESS_INFO.name);
   const companyAddress = escapeHtml(BUSINESS_INFO.address);
   const companyEmail = escapeHtml(BUSINESS_INFO.email);
-  const companyPhones = escapeHtml((BUSINESS_INFO.phones || []).join(" · "));
+  const companyPhone = escapeHtml((BUSINESS_INFO.phones || [])[0] || "");
+  const companyWhatsApp = escapeHtml((BUSINESS_INFO.phones || [])[1] || "");
   const customerName = escapeHtml(purchase.customerName);
   const customerPhone = escapeHtml(purchase.customerPhone);
   const planName = escapeHtml(purchase.planName);
@@ -121,6 +123,7 @@ export const openSubscriptionPrintSlip = (purchase, staffUser, onPrinted) => {
     text-align: left; padding-bottom: 14px;
     border-bottom: 2px solid #0c3f66;
   }
+  .company-logo { display: block; width: 58px; height: auto; object-fit: contain; margin: 0 0 8px; }
   .company h1 {
     margin: 0 0 6px; font-size: 21px;
     line-height: 1.3; color: #0c3f66; overflow-wrap: anywhere;
@@ -172,6 +175,7 @@ export const openSubscriptionPrintSlip = (purchase, staffUser, onPrinted) => {
     margin-bottom: 12px;
   }
   body.size-thermal80 .company { padding-bottom: 9px; }
+  body.size-thermal80 .company-logo { width: 42px; margin-bottom: 6px; }
   body.size-thermal80 .company h1 { font-size: 14px; }
   body.size-thermal80 .company p { font-size: 10px; }
   body.size-thermal80 .receipt-title { margin: 12px 0; padding: 9px; }
@@ -197,6 +201,7 @@ export const openSubscriptionPrintSlip = (purchase, staffUser, onPrinted) => {
     margin-bottom: 10px;
   }
   body.size-thermal58 .company { padding-bottom: 7px; }
+  body.size-thermal58 .company-logo { width: 34px; margin-bottom: 5px; }
   body.size-thermal58 .company h1 { font-size: 12px; }
   body.size-thermal58 .company p { font-size: 8.5px; }
   body.size-thermal58 .receipt-title { margin: 9px 0; padding: 7px; }
@@ -250,9 +255,17 @@ export const openSubscriptionPrintSlip = (purchase, staffUser, onPrinted) => {
       <span style="background: #8e44ad;"></span>
     </div>
     <header class="company">
+      <img class="company-logo" src="${logoDataUrl}" alt="Rainbow Wash logo" />
       <h1>${companyName}</h1>
       <p>${companyAddress}</p>
-      <p>${companyPhones}</p>
+      <p class="company-contacts">
+        <span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-label="WhatsApp"><circle cx="12" cy="12" r="11" fill="#25D366"/><path fill="#fff" d="M8.1 6.8c-.3-.6-.6-.6-.9-.6h-.7c-.2 0-.6.1-.9.5-.3.3-1.1 1.1-1.1 2.7s1.1 3.1 1.3 3.3c.2.2 2.1 3.4 5.2 4.6 2.6 1 3.1.8 3.7.7.6-.1 1.9-.8 2.2-1.5.3-.7.3-1.3.2-1.5-.1-.1-.3-.3-.7-.4l-2.1-1c-.3-.1-.5-.2-.7.2-.2.2-.8 1-1 1.2-.2.2-.4.2-.7.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.7l.5-.6c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5Z"/></svg>${companyWhatsApp}
+        </span>
+        <span style="display:inline-flex;align-items:center;gap:4px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-label="Phone"><path fill="#2878C8" d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.49c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.19 2.2Z"/></svg>${companyPhone}
+        </span>
+      </p>
       <p>${companyEmail}</p>
     </header>
 
