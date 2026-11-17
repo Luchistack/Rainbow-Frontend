@@ -51,6 +51,7 @@ export default function Admin() {
   const [loginLoading, setLoginLoading] = useState(false);
 
   const role = currentUser?.role;
+  const canApplyWalkInDiscount = ["Staff", "Manager", "Admin"].includes(role);
   const canSeeOverview = role === "Admin";
   const canSeeReports = role === "Admin";
   const canEditPricing = role === "Manager" || role === "Admin";
@@ -131,6 +132,7 @@ export default function Admin() {
   const [draftBookingDate, setDraftBookingDate] = useState("");
   const [draftBookingTime, setDraftBookingTime] = useState("");
   const [draftPayable, setDraftPayable] = useState("");
+  const [draftDiscountInput, setDraftDiscountInput] = useState("");
   // Laundry draft item picker
   const [draftCategory, setDraftCategory] = useState("selfwash");
   const [draftWashRateId, setDraftWashRateId] = useState("");
@@ -725,7 +727,15 @@ export default function Admin() {
     updateBooking(target.dbId, patch).catch(() => notify("Saved locally, but failed to sync to the server"));
   };
   const updateBookingStatus = (id, status) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status } : b))); persistBookingUpdate(id, { status }); };
-  const updateBookingPayable = (id, payable) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, payable: Number(payable) } : b))); persistBookingUpdate(id, { payable: Number(payable) }); };
+  const updateBookingPayable = (id, payable) => {
+    const nextPayable = Number(payable);
+    setBookings((bs) => bs.map((b) => {
+      if (b.id !== id) return b;
+      const percentage = Number(b.discountPercentage) || 0;
+      return { ...b, payable: nextPayable, discountAmount: nextPayable * percentage / 100 };
+    }));
+    persistBookingUpdate(id, { payable: nextPayable });
+  };
   const updateBookingPayment = (id, paymentStatus) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, paymentStatus } : b))); persistBookingUpdate(id, { paymentStatus }); };
   const updateBookingMethod = (id, paymentMethod) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, paymentMethod } : b))); persistBookingUpdate(id, { paymentMethod }); };
 
@@ -1246,6 +1256,7 @@ export default function Admin() {
     setDraftBookingDate("");
     setDraftBookingTime("");
     setDraftPayable("");
+    setDraftDiscountInput("");
     setDraftProductId("");
     setDraftProductQty(1);
     setDraftExOptionId("");
@@ -1378,14 +1389,25 @@ export default function Admin() {
   const draftSubtotal = draftRegularSubtotal + draftExpressGross;
   const draftVat = draftSubtotal * VAT_RATE;
   const draftTotal = draftSubtotal + draftVat + (draftType === "laundry" && effectiveDraftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0);
+  const draftDiscountRate = Math.min(100, Math.max(0, Number(draftDiscountInput) || 0));
+  const draftDiscountAmount = draftSubtotal * draftDiscountRate / 100;
+  const draftCleaningSubtotal = Number(draftPayable) || 0;
+  const draftCleaningVat = draftCleaningSubtotal * VAT_RATE;
+  const draftCleaningDiscountAmount = draftCleaningSubtotal * draftDiscountRate / 100;
+  const draftCleaningTotal = draftCleaningSubtotal + draftCleaningVat - draftCleaningDiscountAmount;
   const draftShopTotal = draftSubtotal + draftVat; // shop checkout has no delivery-fee concept, just VAT on top
-  const draftDisplayTotals = roundedMoneyParts(
+  const draftDisplayBaseTotals = roundedMoneyParts(
     draftSubtotal,
     draftVat,
     draftType === "laundry" && effectiveDraftFulfilment === "pickup"
       ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE)
       : 0
   );
+  const draftDisplayTotals = {
+    ...draftDisplayBaseTotals,
+    discount: Math.round(draftDiscountAmount),
+    total: Math.round(draftSubtotal + draftVat + draftDisplayBaseTotals.other - draftDiscountAmount),
+  };
   const draftShopDisplayTotals = roundedMoneyParts(draftSubtotal, draftVat);
 
   const placeDraftLaundryOrder = async () => {
@@ -1407,7 +1429,7 @@ export default function Admin() {
       const saved = await createOrder({
         items: draftItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, price: i.price })),
         fulfilment: effectiveDraftFulfilment, address: effectiveDraftFulfilment === "pickup" ? draftAddress : "",
-        paymentMethod: "walk-in", deliveryFee: effectiveDraftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0, total: draftTotal,
+        paymentMethod: "walk-in", deliveryFee: effectiveDraftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0, total: draftTotal, discountPercentage: draftDiscountRate,
         fullName: draftFullName.trim(), phone: draftPhone.trim(), email: draftEmail.trim(),
         description: draftDescription.trim(), createdBy: currentUser?.name,
       });
@@ -1446,7 +1468,7 @@ export default function Admin() {
         description: draftDescription.trim(),
         date: draftBookingDate, time: draftBookingTime, address: draftAddress.trim(),
         fullName: draftFullName.trim(), phone: draftPhone.trim(), email,
-        price: payable, payType: "full", payable,
+        price: payable, payType: "full", payable, discountPercentage: draftDiscountRate,
         paymentStatus: "Pending", status: "Confirmed",
         placedAt: new Date().toISOString(), archived: false, locked: true, printed: false,
       };
@@ -1517,7 +1539,7 @@ export default function Admin() {
       key: `C-${b.id}`, type: "Cleaning", ref: b.id, placedAt: b.placedAt, name: b.fullName, phone: b.phone, email: b.email,
       details: `${b.service} · ${b.size}`,
       description: b.description || "",
-      total: b.payable, status: b.status, paymentStatus: b.paymentStatus, record: b,
+      total: Number(b.payable || 0) - Number(b.discountAmount || 0), status: b.status, paymentStatus: b.paymentStatus, record: b,
     })),
     ...shopOrders.map((o) => ({
       key: `S-${o.id}`, type: "Shop", ref: o.id, placedAt: o.placedAt, name: o.fullName, phone: o.phone, email: "",
@@ -1564,7 +1586,7 @@ export default function Admin() {
 
   const allRecords = [
     ...laundryOrders.map((o) => ({ type: "Laundry", ref: o.id, dbId: o.dbId, total: o.total, placedAt: o.placedAt, paymentStatus: o.paymentStatus, name: o.fullName, phone: o.phone })),
-    ...bookings.map((b) => ({ type: "Cleaning", ref: b.id, dbId: b.dbId, total: b.payable, placedAt: b.placedAt, paymentStatus: b.paymentStatus, name: b.fullName, phone: b.phone })),
+    ...bookings.map((b) => ({ type: "Cleaning", ref: b.id, dbId: b.dbId, total: Number(b.payable || 0) - Number(b.discountAmount || 0), placedAt: b.placedAt, paymentStatus: b.paymentStatus, name: b.fullName, phone: b.phone })),
     ...shopOrders.map((o) => ({ type: "Shop", ref: o.id, dbId: o.dbId, total: o.total, placedAt: o.placedAt, paymentStatus: o.paymentStatus, name: o.fullName, phone: o.phone })),
     ...subscriptionPurchases.map((purchase) => ({
       type: "Subscription",
@@ -1988,9 +2010,16 @@ export default function Admin() {
                   </>
                 )}
 
+                {canApplyWalkInDiscount && draftType === "laundry" && (
+                  <div style={{ maxWidth: 220, marginTop: 12 }}>
+                    <label>Optional discount (%)</label>
+                    <input type="number" min="0" max="100" step="0.01" value={draftDiscountInput} onChange={(e) => setDraftDiscountInput(e.target.value)} placeholder="0" />
+                  </div>
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
                   <div style={{ fontSize: 13, color: "var(--ink-soft)" }}>
                     <div>Subtotal {money(draftDisplayTotals.subtotal)} + VAT ({VAT_RATE * 100}%) {money(draftDisplayTotals.vat)}</div>
+                    {draftDisplayTotals.discount > 0 && <div>Discount ({draftDiscountRate}%): -{money(draftDisplayTotals.discount)}</div>}
                     {effectiveDraftFulfilment === "pickup" && (
                       <div>Delivery fee {money(draftDisplayTotals.other)}</div>
                     )}
@@ -2095,7 +2124,18 @@ export default function Admin() {
                     <label>Confirmed price (₦)</label>
                     <input type="number" step="500" placeholder="0" value={draftPayable} onChange={(e) => setDraftPayable(e.target.value)} />
                   </div>
+                  {canApplyWalkInDiscount && (
+                    <div>
+                      <label>Optional discount (%)</label>
+                      <input type="number" min="0" max="100" step="0.01" value={draftDiscountInput} onChange={(e) => setDraftDiscountInput(e.target.value)} placeholder="0" />
+                    </div>
+                  )}
                   <div style={{ gridColumn: "1 / -1" }}><label>Description (optional)</label><textarea rows={2} maxLength={1000} value={draftDescription} onChange={(e) => setDraftDescription(e.target.value)} placeholder="e.g. Clean inside kitchen cabinets too." /></div>
+                </div>
+                <div style={{ marginBottom: 14, fontSize: 13, color: "var(--ink-soft)" }}>
+                  <div>Subtotal {money(draftCleaningSubtotal)} + VAT ({VAT_RATE * 100}%) {money(draftCleaningVat)}</div>
+                  {draftCleaningDiscountAmount > 0 && <div>Discount ({draftDiscountRate}%): -{money(draftCleaningDiscountAmount)}</div>}
+                  <strong style={{ display: "block", marginTop: 4, color: "var(--ink)", fontSize: 15 }}>Total: {money(draftCleaningTotal)}</strong>
                 </div>
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <button className="rw-btn rw-btn-rainbow" onClick={placeDraftBooking} disabled={placingDraft}>
@@ -2121,7 +2161,7 @@ export default function Admin() {
                       {canEditOrderContent && !b.printed ? (
                         <input type="number" step="500" style={{ width: 90, padding: "6px 8px" }} value={b.payable} onChange={(e) => updateBookingPayable(b.id, e.target.value)} />
                       ) : (
-                        <span style={{ fontWeight: 700 }}>{money(b.payable)}</span>
+                        <span style={{ fontWeight: 700 }}>{money(Number(b.payable || 0) - Number(b.discountAmount || 0))}</span>
                       )}
                     </td>
                     <td>

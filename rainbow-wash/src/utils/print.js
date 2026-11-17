@@ -38,14 +38,21 @@ function computeTotals(order) {
     const subtotal = regularSubtotal + expressGross;
     const vat = subtotal * VAT_RATE;
     const other = order.fulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(order.deliveryFee) || DELIVERY_FEE) : 0;
-    const total = subtotal + vat + other;
-    return roundedMoneyParts(subtotal, vat, other);
+    const base = roundedMoneyParts(subtotal, vat, other);
+    const discount = Math.round(order.discountAmount != null
+      ? Number(order.discountAmount) || 0
+      : subtotal * (Number(order.discountPercentage) || 0) / 100);
+    return { ...base, discount, total: Math.round(base.total - discount) };
   }
   // Cleaning bookings: no item list, just a single confirmed/negotiated price.
   // That price is treated as the pre-VAT amount, VAT is added on top here.
   const subtotal = order.payable ?? order.price ?? order.total ?? 0;
   const vat = subtotal * VAT_RATE;
-  return roundedMoneyParts(subtotal, vat);
+  const base = roundedMoneyParts(subtotal, vat);
+  const discount = Math.round(order.discountAmount != null
+    ? Number(order.discountAmount) || 0
+    : subtotal * (Number(order.discountPercentage) || 0) / 100);
+  return { ...base, discount, total: Math.round(base.total - discount) };
 }
 
 function plainTextLines(order, subtotal) {
@@ -61,7 +68,7 @@ function getFulfilmentLabel(order) {
 }
 
 function buildShareText(order) {
-  const { subtotal, vat, other, total } = computeTotals(order);
+  const { subtotal, vat, other, discount, total } = computeTotals(order);
   const placedDate = order.placedAt ? new Date(order.placedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
   const lines = [
@@ -80,6 +87,7 @@ function buildShareText(order) {
     `Subtotal: ${money(subtotal)}`,
     `VAT (${VAT_RATE * 100}%): ${money(vat)}`,
   ];
+  if (discount > 0) lines.push(`Discount (${Number(order.discountPercentage) || 0}%): -${money(discount)}`);
   if (other > 1) lines.push(`Delivery / Other: ${money(other)}`);
   lines.push(
     `Total: ${money(total)}`,
@@ -130,7 +138,7 @@ const PRINT_SIZE_CSS = {
 };
 
 export function openPrintSlip(order, staffUser, onPrinted) {
-  const { subtotal, vat, other, total } = computeTotals(order);
+  const { subtotal, vat, other, discount, total } = computeTotals(order);
   const rows = rowsForOrder(order, subtotal);
 
   const placedDate = order.placedAt ? new Date(order.placedAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "—";
@@ -169,6 +177,9 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     )
     .join("");
 
+  const discountRowHtml = discount > 0
+    ? `<div><span>Discount (${Number(order.discountPercentage) || 0}%)</span><span>-${money(discount)}</span></div>`
+    : "";
   const otherRowHtml = other > 1 ? `<div><span>Delivery / Other</span><span>${money(other)}</span></div>` : "";
   const descriptionHtml = order.description
     ? `<div class="order-description"><strong>Description:</strong> ${escapeHtml(order.description)}</div>`
@@ -197,6 +208,8 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     subtotal: money(subtotal),
     vatLabel: `VAT (${VAT_RATE * 100}%)`,
     vat: money(vat),
+    discountLabel: discount > 0 ? `Discount (${Number(order.discountPercentage) || 0}%)` : null,
+    discount: discount > 0 ? `-${money(discount)}` : null,
     other: other > 1 ? money(other) : null,
     total: money(total),
     printedBy: `${staffUser?.name || "Staff"} (${staffUser?.role || "Staff"})`,
@@ -339,6 +352,7 @@ export function openPrintSlip(order, staffUser, onPrinted) {
   <div class="totals">
     <div><span>Subtotal</span><span>${money(subtotal)}</span></div>
     <div><span>VAT (${VAT_RATE * 100}%)</span><span>${money(vat)}</span></div>
+    ${discountRowHtml}
     ${otherRowHtml}
     <div class="grand"><span>Total</span><span>${money(total)}</span></div>
   </div>
@@ -415,7 +429,7 @@ export function openPrintSlip(order, staffUser, onPrinted) {
         (d.items || []).forEach(function (r) {
           estimatedH += 48 + Math.ceil(String(r.desc || '').length / (is80 ? 25 : 16)) * 12;
         });
-        estimatedH += (d.other ? 120 : 100);
+        estimatedH += (d.other ? 120 : 100) + (d.discount ? 20 : 0);
         estimatedH = Math.max(estimatedH, 420);
       }
 
@@ -656,7 +670,7 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       y += small ? 5 : 12;
       var boxW = small ? contentW : Math.min(250, contentW);
       var boxX = right - boxW;
-      var totalRows = d.other ? 4 : 3;
+      var totalRows = 3 + (d.other ? 1 : 0) + (d.discount ? 1 : 0);
       var boxH = totalRows * (small ? 14 : 20) + (small ? 13 : 18);
 
       doc.setFillColor(244, 248, 251);
@@ -677,6 +691,12 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       doc.text(String(d.vatLabel || 'VAT'), labelX, ty);
       doc.text(String(d.vat), amountX, ty, { align: 'right' });
       ty += small ? 14 : 20;
+
+      if (d.discount) {
+        doc.text(String(d.discountLabel || 'Discount'), labelX, ty);
+        doc.text(String(d.discount), amountX, ty, { align: 'right' });
+        ty += small ? 14 : 20;
+      }
 
       if (d.other) {
         doc.text('Delivery / Other', labelX, ty);
