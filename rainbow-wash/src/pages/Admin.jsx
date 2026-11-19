@@ -111,6 +111,14 @@ export default function Admin() {
   const [confirmDeleteEmp, setConfirmDeleteEmp] = useState(null);
   const [deletingEmpId, setDeletingEmpId] = useState(null);
 
+  // Manager/Admin editor for existing Laundry and Cleaning records.
+  const [editingRecordType, setEditingRecordType] = useState(null);
+  const [editingRecordId, setEditingRecordId] = useState(null);
+  const [recordEditDraft, setRecordEditDraft] = useState(null);
+  const [savingRecordEdit, setSavingRecordEdit] = useState(false);
+  const [confirmDeleteRecord, setConfirmDeleteRecord] = useState(null);
+  const [deletingRecord, setDeletingRecord] = useState(false);
+
   // --- Walk-in / offline order drafting ---
   // Each of the three order types gets its own "open a draft" toggle. While a
   // draft is open, staff/manager/admin can freely add, edit and remove lines —
@@ -1236,6 +1244,180 @@ export default function Admin() {
   // Clearing an active list archives records; History retains them.
   const canEditOrderContent = role !== "Staff";
   const canDeleteOrder = () => role === "Admin";
+
+  const beginRecordEdit = (type, record) => {
+    if (!canEditPricing || !record) return;
+    const values = type === "Laundry" ? {
+      fullName: record.fullName || "",
+      phone: record.phone || "",
+      email: record.email || "",
+      description: record.description || "",
+      items: (record.items || []).map((item) => ({ ...item })),
+      fulfilment: record.fulfilment || "dropoff",
+      address: record.address || "",
+      preferredDate: record.preferredDate || record.date || "",
+      preferredTime: record.preferredTime || record.time || "",
+      deliveryFee: record.deliveryFee ?? 0,
+      discountPercentage: record.discountPercentage ?? 0,
+      total: record.total ?? 0,
+      paymentMethod: record.paymentMethod || record.payment || "Transfer",
+      transferNote: record.transferNote || "",
+      paymentStatus: record.paymentStatus || "Pending",
+      status: record.status || "Received",
+    } : {
+      fullName: record.fullName || "",
+      phone: record.phone || "",
+      email: record.email || "",
+      description: record.description || "",
+      service: record.service || "",
+      size: record.size || "",
+      date: record.date || record.bookingDate || "",
+      time: record.time || record.bookingTime || "",
+      address: record.address || "",
+      payType: record.payType || "full",
+      payable: record.payable ?? record.price ?? 0,
+      discountPercentage: record.discountPercentage ?? 0,
+      paymentMethod: record.paymentMethod || "Transfer",
+      transferNote: record.transferNote || "",
+      paymentStatus: record.paymentStatus || "Pending",
+      status: record.status || "Confirmed",
+    };
+
+    setEditingRecordType(type);
+    setEditingRecordId(String(record.id));
+    setRecordEditDraft({ original: record, values });
+  };
+
+  const closeRecordEdit = () => {
+    if (savingRecordEdit) return;
+    setEditingRecordType(null);
+    setEditingRecordId(null);
+    setRecordEditDraft(null);
+  };
+
+  const changeRecordEditField = (field, value) => {
+    setRecordEditDraft((current) => current
+      ? { ...current, values: { ...current.values, [field]: value } }
+      : current);
+  };
+
+  const saveRecordEdit = async () => {
+    if (!canEditPricing || !recordEditDraft || savingRecordEdit) return;
+
+    const { original, values } = recordEditDraft;
+    if (!original?.dbId) {
+      notify("This record has no database ID and cannot be updated on the server.");
+      return;
+    }
+    if (!values.fullName.trim() || !values.phone.trim()) {
+      notify("Customer name and phone are required.");
+      return;
+    }
+
+    const patch = {};
+    const fields = editingRecordType === "Laundry"
+      ? ["fullName", "phone", "email", "description", "items", "fulfilment", "address",
+         "preferredDate", "preferredTime", "deliveryFee", "discountPercentage", "total",
+         "paymentMethod", "transferNote", "paymentStatus", "status"]
+      : ["fullName", "phone", "email", "description", "service", "size", "date", "time",
+         "address", "payType", "payable", "discountPercentage", "paymentMethod",
+         "transferNote", "paymentStatus", "status"];
+
+    for (const field of fields) {
+      const before = editingRecordType === "Laundry"
+        ? (field === "preferredDate" ? (original.preferredDate || original.date || "")
+          : field === "preferredTime" ? (original.preferredTime || original.time || "")
+          : original[field])
+        : (field === "date" ? (original.date || original.bookingDate || "")
+          : field === "time" ? (original.time || original.bookingTime || "")
+          : original[field]);
+
+      let next = values[field];
+      if (["deliveryFee", "discountPercentage", "total", "payable"].includes(field)) {
+        next = Number(next);
+        if (!Number.isFinite(next) || next < 0) {
+          notify("Enter valid non-negative amounts and discount percentages.");
+          return;
+        }
+      }
+      if (field === "items") {
+        next = (next || []).map((item) => ({
+          name: String(item.name || "").trim(),
+          qty: Number(item.qty),
+          unit: item.unit || "",
+          price: Number(item.price),
+        }));
+        if (!next.length || next.some((item) =>
+          !item.name || !Number.isFinite(item.qty) || item.qty <= 0 ||
+          !Number.isFinite(item.price) || item.price < 0
+        )) {
+          notify("Laundry needs at least one valid item with a name, quantity and price.");
+          return;
+        }
+      }
+      if (JSON.stringify(before ?? "") !== JSON.stringify(next ?? "")) {
+        patch[field] = next;
+      }
+    }
+
+    if (Object.keys(patch).length === 0) {
+      notify("No changes to save.");
+      closeRecordEdit();
+      return;
+    }
+
+    setSavingRecordEdit(true);
+    try {
+      const saved = editingRecordType === "Laundry"
+        ? await updateOrder(original.dbId, patch)
+        : await updateBooking(original.dbId, patch);
+
+      if (editingRecordType === "Laundry") {
+        setLaundryOrders((orders) => orders.map((order) =>
+          String(order.id) === String(original.id) ? { ...order, ...saved } : order));
+      } else {
+        setBookings((current) => current.map((booking) =>
+          String(booking.id) === String(original.id) ? { ...booking, ...saved } : booking));
+      }
+
+      setEditingRecordType(null);
+      setEditingRecordId(null);
+      setRecordEditDraft(null);
+      notify(`${editingRecordType} record updated successfully.`);
+    } catch (error) {
+      notify(error?.message || "Could not update this record. No local changes were applied.");
+    } finally {
+      setSavingRecordEdit(false);
+    }
+  };
+
+  const permanentlyDeleteHistoryRecord = async () => {
+    if (role !== "Admin" || !confirmDeleteRecord || deletingRecord) return;
+    const { type, record } = confirmDeleteRecord;
+    if (!record?.dbId) {
+      notify("This record has no database ID and cannot be deleted from the server.");
+      return;
+    }
+
+    setDeletingRecord(true);
+    try {
+      if (type === "Laundry") {
+        await deleteOrder(record.dbId);
+        setLaundryOrders((orders) => orders.filter((order) =>
+          String(order.id) !== String(record.id)));
+      } else if (type === "Cleaning") {
+        await deleteBooking(record.dbId);
+        setBookings((current) => current.filter((booking) =>
+          String(booking.id) !== String(record.id)));
+      }
+      setConfirmDeleteRecord(null);
+      notify(`${type} record permanently deleted.`);
+    } catch (error) {
+      notify(error?.message || "Could not delete this record.");
+    } finally {
+      setDeletingRecord(false);
+    }
+  };
   const markLaundryPrinted = (id) => { setLaundryOrders((os) => os.map((o) => (o.id === id ? { ...o, printed: true } : o))); persistOrder(id, { printed: true }); };
   const markBookingPrinted = (id) => { setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, printed: true } : b))); persistBookingUpdate(id, { printed: true }); };
   const markShopPrinted = (id) => { setShopOrders((os) => os.map((o) => (o.id === id ? { ...o, printed: true } : o))); persistShopOrder(id, { printed: true }); };
@@ -2065,6 +2247,9 @@ export default function Admin() {
                       </select>
                     </td>
                     <td style={{ display: "flex", gap: 4 }}>
+                      {canEditPricing && (
+                        <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => beginRecordEdit("Laundry", o)} title="Edit laundry order"><Lock size={13} /></button>
+                      )}
                       <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => openPrintSlip(o, currentUser, () => markLaundryPrinted(o.id))} title="Print slip"><Printer size={13} /></button>
                       {canDeleteOrder(o) && (
                         <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => archiveOrder(o.id)} title="Remove from today's list (kept in History)"><Archive size={13} /></button>
@@ -2180,6 +2365,9 @@ export default function Admin() {
                       </select>
                     </td>
                     <td style={{ display: "flex", gap: 4 }}>
+                      {canEditPricing && (
+                        <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => beginRecordEdit("Cleaning", b)} title="Edit cleaning booking"><Lock size={13} /></button>
+                      )}
                       <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => openPrintSlip(b, currentUser, () => markBookingPrinted(b.id))} title="Print slip"><Printer size={13} /></button>
                       {canDeleteOrder(b) && (
                         <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => archiveBooking(b.id)} title="Remove from today's list (kept in History)"><Archive size={13} /></button>
@@ -2401,6 +2589,19 @@ export default function Admin() {
                               onClick={() => beginExpressQuoteEdit(r.record)}
                               title="Edit quote price and status">Edit quote</button>
                           )
+                        )}
+                        {(r.type === "Laundry" || r.type === "Cleaning") && canEditPricing && (
+                          <button className="rw-btn rw-btn-ghost rw-btn-sm"
+                            onClick={() => beginRecordEdit(r.type, r.record)}
+                            title={`Edit ${r.type} record`}>Edit</button>
+                        )}
+                        {(r.type === "Laundry" || r.type === "Cleaning") && role === "Admin" && (
+                          <button className="rw-btn rw-btn-ghost rw-btn-sm"
+                            onClick={() => setConfirmDeleteRecord({ type: r.type, record: r.record })}
+                            title={`Permanently delete ${r.type} record`}
+                            style={{ color: "#dc2626" }}>
+                            <Trash2 size={13} />
+                          </button>
                         )}
                         <button className="rw-btn rw-btn-ghost rw-btn-sm"
                           onClick={() => {
@@ -3513,6 +3714,145 @@ export default function Admin() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {editingRecordType && recordEditDraft && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(7,26,47,.62)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 120, padding: 16 }}>
+            <div style={{ background: "#fff", borderRadius: 12, padding: 24, width: "min(760px, 100%)", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,.2)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18 }}>
+                <div>
+                  <h3 style={{ fontSize: 18, margin: 0 }}>Edit {editingRecordType} record</h3>
+                  <p style={{ color: "var(--ink-soft)", fontSize: 12, margin: "5px 0 0" }}>Changes are saved to the existing record.</p>
+                </div>
+                <button type="button" className="rw-btn rw-btn-ghost rw-btn-sm" onClick={closeRecordEdit} disabled={savingRecordEdit}>Close</button>
+              </div>
+
+              {(() => {
+                const v = recordEditDraft.values;
+                const fieldStyle = { width: "100%", padding: 9, border: "1px solid #cbd5e1", borderRadius: 6, boxSizing: "border-box" };
+                const labelStyle = { display: "block", fontSize: 12, fontWeight: 600, marginBottom: 5 };
+                const field = (label, key, type = "text") => (
+                  <div>
+                    <label style={labelStyle}>{label}</label>
+                    <input type={type} value={v[key] ?? ""} onChange={(e) => changeRecordEditField(key, e.target.value)} style={fieldStyle} />
+                  </div>
+                );
+                const choice = (label, key, options) => {
+                  const availableOptions = [...options];
+                  if (v[key] && !availableOptions.includes(v[key])) {
+                    availableOptions.unshift(v[key]);
+                  }
+                  return (
+                    <div>
+                      <label style={labelStyle}>{label}</label>
+                      <select value={v[key] ?? ""} onChange={(e) => changeRecordEditField(key, e.target.value)} style={fieldStyle}>
+                        {availableOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </div>
+                  );
+                };
+                return (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+                      {field("Customer name", "fullName")}
+                      {field("Phone", "phone")}
+                      {field("Email", "email", "email")}
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <label style={labelStyle}>Description / special instructions</label>
+                      <textarea value={v.description} onChange={(e) => changeRecordEditField("description", e.target.value)} rows={3} style={{ ...fieldStyle, resize: "vertical" }} />
+                    </div>
+
+                    {editingRecordType === "Laundry" ? (
+                      <>
+                        <h4 style={{ margin: "20px 0 10px", fontSize: 14 }}>Laundry items</h4>
+                        {(v.items || []).map((item, index) => (
+                          <div key={index} style={{ display: "grid", gridTemplateColumns: "minmax(120px, 2fr) minmax(65px, .7fr) minmax(75px, .8fr) minmax(90px, 1fr) auto", gap: 7, alignItems: "end", marginBottom: 9 }}>
+                            <div>
+                              <label style={labelStyle}>Item</label>
+                              <input value={item.name || ""} onChange={(e) => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.map((x, i) => i === index ? { ...x, name: e.target.value } : x) } }))} style={fieldStyle} />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>Qty</label>
+                              <input type="number" min="0.01" step="any" value={item.qty ?? ""} onChange={(e) => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.map((x, i) => i === index ? { ...x, qty: e.target.value } : x) } }))} style={fieldStyle} />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>Unit</label>
+                              <input value={item.unit || ""} onChange={(e) => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.map((x, i) => i === index ? { ...x, unit: e.target.value } : x) } }))} style={fieldStyle} />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>Price (₦)</label>
+                              <input type="number" min="0" step="any" value={item.price ?? ""} onChange={(e) => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.map((x, i) => i === index ? { ...x, price: e.target.value } : x) } }))} style={fieldStyle} />
+                            </div>
+                            <button type="button" className="rw-btn rw-btn-ghost rw-btn-sm" title="Remove item" onClick={() => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.filter((_, i) => i !== index) } }))}><Trash2 size={14} /></button>
+                          </div>
+                        ))}
+                        <button type="button" className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: [...current.values.items, { name: "", qty: 1, unit: "pcs", price: 0 }] } }))}><Plus size={13} /> Add item</button>
+
+                        <h4 style={{ margin: "20px 0 10px", fontSize: 14 }}>Fulfilment and charges</h4>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+                          {choice("Fulfilment", "fulfilment", ["dropoff", "pickup"])}
+                          {field("Preferred date", "preferredDate", "date")}
+                          {field("Preferred time", "preferredTime", "time")}
+                          {field("Delivery address", "address")}
+                          {field("Delivery fee (₦)", "deliveryFee", "number")}
+                          {field("Discount (%)", "discountPercentage", "number")}
+                          {field("Total (₦)", "total", "number")}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <h4 style={{ margin: "20px 0 10px", fontSize: 14 }}>Cleaning service</h4>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+                          {field("Service", "service")}
+                          {field("Size", "size")}
+                          {field("Date", "date", "date")}
+                          {field("Time", "time", "time")}
+                          {field("Address", "address")}
+                          {choice("Payment type", "payType", ["full", "deposit"])}
+                          {field("Payable amount (₦)", "payable", "number")}
+                          {field("Discount (%)", "discountPercentage", "number")}
+                        </div>
+                      </>
+                    )}
+
+                    <h4 style={{ margin: "20px 0 10px", fontSize: 14 }}>Payment and order status</h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+                      {choice("Payment method", "paymentMethod", PAYMENT_METHODS)}
+                      {choice("Payment status", "paymentStatus", PAYMENT_STATUSES)}
+                      {choice("Order status", "status", editingRecordType === "Laundry" ? TRACK_STAGES : BOOKING_STAGES)}
+                      {field("Transfer note / reference", "transferNote")}
+                    </div>
+                  </>
+                );
+              })()}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 22, borderTop: "1px solid #e2e8f0", paddingTop: 16 }}>
+                <button type="button" className="rw-btn rw-btn-ghost rw-btn-sm" onClick={closeRecordEdit} disabled={savingRecordEdit}>Cancel</button>
+                <button type="button" className="rw-btn rw-btn-primary rw-btn-sm" onClick={saveRecordEdit} disabled={savingRecordEdit}>
+                  {savingRecordEdit ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {confirmDeleteRecord && role === "Admin" && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(7,26,47,.62)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 130, padding: 16 }}>
+            <div style={{ background: "#fff", borderRadius: 12, padding: 26, maxWidth: 430, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,.2)" }}>
+              <h3 style={{ fontSize: 17, marginBottom: 10 }}>Permanently delete this {confirmDeleteRecord.type} record?</h3>
+              <p style={{ fontSize: 13.5, color: "var(--ink-soft)", marginBottom: 20 }}>
+                This will permanently remove the record for <b>{confirmDeleteRecord.record?.fullName || "this customer"}</b> from the database. This action cannot be undone.
+              </p>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button type="button" className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setConfirmDeleteRecord(null)} disabled={deletingRecord}>Cancel</button>
+                <button type="button" className="rw-btn rw-btn-primary rw-btn-sm" style={{ background: "var(--bad)" }} onClick={permanentlyDeleteHistoryRecord} disabled={deletingRecord}>
+                  {deletingRecord ? "Deleting..." : "Delete permanently"}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
