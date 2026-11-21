@@ -23,7 +23,6 @@ import {
 } from "../api/api";
 
 const MIN_UNIT = 5;
-const RESTOCK_STEP = 5;
 const RANGES = [
   { id: "today", label: "Today" },
   { id: "week", label: "This Week" },
@@ -64,9 +63,13 @@ export default function Admin() {
 
   const [newName, setNewName] = useState("");
   const [newPrice, setNewPrice] = useState("");
+  const [newUnit, setNewUnit] = useState("");
+  const [newCategory, setNewCategory] = useState("Shop");
+  const [newDescription, setNewDescription] = useState("");
   const [newStock, setNewStock] = useState(MIN_UNIT);
   const [newStatus, setNewStatus] = useState("Active");
   const [addingProduct, setAddingProduct] = useState(false);
+  const [restockQuantities, setRestockQuantities] = useState({});
   const [pricingDrafts, setPricingDrafts] = useState({});
   const [customServiceDrafts, setCustomServiceDrafts] = useState({});
   const [newCustomService, setNewCustomService] = useState({ category: "", name: "", description: "", pricingUnit: "Per item", price: "" });
@@ -319,8 +322,8 @@ export default function Admin() {
   // above the early return alongside its four sibling effects.
   useEffect(() => {
     const pickerItems = [
-      ...products.filter((p) => (p.status || "Active") === "Active").map((p) => ({ id: p.id })),
-      ...addonProducts.map((a) => ({ id: a.id })),
+      ...products.filter((p) => (p.status || "Active") === "Active").map((p) => ({ id: `inventory:${p.id}` })),
+      ...addonProducts.map((a) => ({ id: `addon:${a.id}` })),
     ];
     if (pickerItems.length && !pickerItems.find((p) => String(p.id) === String(draftProductId))) setDraftProductId(pickerItems[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -784,8 +787,13 @@ export default function Admin() {
 
   const restock = (id) => {
     const target = products.find((p) => String(p.id) === String(id));
+    const quantity = Number(restockQuantities[id] ?? 1);
     if (!target) return;
-    const updated = { ...target, stock: target.stock + RESTOCK_STEP };
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      notify("Enter a positive whole-number restock quantity");
+      return;
+    }
+    const updated = { ...target, stock: Number(target.stock || 0) + quantity };
     setProducts((ps) => ps.map((p) => (p.id === id ? updated : p)));
     persistProduct(updated);
   };
@@ -832,7 +840,10 @@ export default function Admin() {
   // --- Inventory: create a real product on the backend, then reflect the real
   // saved row (with its real DB id) in local state — no more fake "p"+Date.now() ids. ---
   const addProduct = async () => {
-    if (!newName.trim() || !newPrice) return;
+    if (!newName.trim() || !newPrice || !newUnit.trim() || !newCategory.trim()) {
+      notify("Enter the product name, price, unit and category");
+      return;
+    }
     setAddingProduct(true);
     try {
       const saved = await createProduct({
@@ -840,14 +851,18 @@ export default function Admin() {
         price: Math.max(0, Number(newPrice)),
         stock: Math.max(MIN_UNIT, Number(newStock) || MIN_UNIT),
         status: newStatus,
-        category: "Shop",
-        description: "",
+        unit: newUnit.trim(),
+        category: newCategory.trim(),
+        description: newDescription.trim(),
       });
 
       setProducts((ps) => [...ps, saved]);
 
       setNewName("");
       setNewPrice("");
+      setNewUnit("");
+      setNewCategory("Shop");
+      setNewDescription("");
       setNewStock(MIN_UNIT);
       setNewStatus("Active");
     } catch (err) {
@@ -1463,13 +1478,15 @@ export default function Admin() {
     }
   };
 
-  const addDraftItem = (name, qty, price, unit) => {
+  const addDraftItem = (name, qty, price, unit, productId = null) => {
     setDraftItems((its) => {
       const existing = its.find(
-        (i) => i.name === name && i.unit === unit && Number(i.price) === Number(price)
+        (i) => i.name === name && i.unit === unit &&
+          Number(i.price) === Number(price) &&
+          (i.productId ?? null) === (productId ?? null)
       );
       if (existing) return its.map((i) => (i === existing ? { ...i, qty: i.qty + qty } : i));
-      return [...its, { id: `${Date.now()}-${Math.random()}`, name, qty, price, unit }];
+      return [...its, { id: `${Date.now()}-${Math.random()}`, name, qty, price, unit, productId }];
     });
   };
   const removeDraftItem = (id) => setDraftItems((its) => its.filter((i) => i.id !== id));
@@ -1541,14 +1558,24 @@ export default function Admin() {
   // sell them right now", so anything added or edited in either place should
   // immediately be pickable here, not just items created through Inventory.
   const shopPickerItems = [
-    ...products.filter((p) => (p.status || "Active") === "Active").map((p) => ({ id: p.id, name: p.name, price: p.price })),
-    ...addonProducts.map((a) => ({ id: a.id, name: a.label, price: a.price })),
+    ...products.filter((p) => (p.status || "Active") === "Active").map((p) => ({
+      id: `inventory:${p.id}`,
+      productId: p.id,
+      name: p.name,
+      price: p.price,
+    })),
+    ...addonProducts.map((a) => ({
+      id: `addon:${a.id}`,
+      productId: null,
+      name: a.label,
+      price: a.price,
+    })),
   ];
 
   const addDraftProductLine = () => {
     const product = shopPickerItems.find((p) => String(p.id) === String(draftProductId));
     if (!product) { notify("Products are still loading, try again in a moment"); return; }
-    addDraftItem(product.name, draftProductQty, product.price, "");
+    addDraftItem(product.name, draftProductQty, product.price, "", product.productId ?? null);
   };
 
   const selectedDraftExpressService = expressServices.find(
@@ -1670,7 +1697,7 @@ export default function Admin() {
     if (!draftFullName.trim() || !draftPhone.trim()) { notify("Name and phone are required"); return; }
     const localOrder = {
       id: genRef("SHOP"),
-      items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+      items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price, productId: i.productId ?? null })),
       fullName: draftFullName.trim(), phone: draftPhone.trim(), mode: draftMode,
       description: draftDescription.trim(),
       total: draftShopTotal, status: "Received", paymentStatus: "Pending",
@@ -1679,7 +1706,7 @@ export default function Admin() {
     setPlacingDraft(true);
     try {
       const saved = await createShopOrder({
-        items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+        items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price, productId: i.productId ?? null })),
         fullName: draftFullName.trim(), phone: draftPhone.trim(), mode: draftMode,
         description: draftDescription.trim(), total: draftShopTotal, createdBy: currentUser?.name,
       });
@@ -2478,7 +2505,7 @@ export default function Admin() {
                     <td>{money(o.total)}</td>
                     <td>
                       <select className="rw-status-select" value={o.status} onChange={(e) => updateShopOrderStatus(o.id, e.target.value)}>
-                        {["Received", "Packed", "Out for Delivery", "Completed"].map((s) => <option key={s} value={s}>{s}</option>)}
+                        {["Received", "Packed", "Out for Delivery", "Completed", "Cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </td>
                     <td>
@@ -2638,9 +2665,12 @@ export default function Admin() {
             <div className="rw-admin-panel-head"><h2>Inventory</h2></div>
 
             <div className="rw-add-product-form">
-              <div><label>Product name</label><input placeholder="e.g. Bleach 1L" value={newName} onChange={(e) => setNewName(e.target.value)} /></div>
-              <div><label>Price (₦)</label><input type="text" inputMode="decimal" min="0" placeholder="2500" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} /></div>
-              <div><label>Stock (units)</label><input type="number" min={MIN_UNIT} step="1" value={newStock} onChange={(e) => setNewStock(e.target.value)} /></div>
+              <div><label>Product name *</label><input placeholder="e.g. Bleach 1L" value={newName} onChange={(e) => setNewName(e.target.value)} /></div>
+              <div><label>Price (₦) *</label><input type="number" min="0" step="0.01" placeholder="2500" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} /></div>
+              <div><label>Unit *</label><input placeholder="e.g. bottle, pack, kg" value={newUnit} onChange={(e) => setNewUnit(e.target.value)} /></div>
+              <div><label>Category *</label><input placeholder="e.g. Shop" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} /></div>
+              <div><label>Description</label><input placeholder="Product description (optional)" value={newDescription} onChange={(e) => setNewDescription(e.target.value)} /></div>
+              <div><label>Opening stock (minimum {MIN_UNIT})</label><input type="number" min={MIN_UNIT} step="1" value={newStock} onChange={(e) => setNewStock(e.target.value)} /></div>
               <div>
                 <label>Status</label>
                 <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
@@ -2652,52 +2682,79 @@ export default function Admin() {
                 <Plus size={15} /> {addingProduct ? "Adding..." : "Add Product"}
               </button>
             </div>
-            <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -14, marginBottom: 20 }}>New stock always starts at {MIN_UNIT} units or more, the field won't accept less.</p>
+            <p style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: -14, marginBottom: 20 }}>New products require a unit and category. Existing products retain their current values.</p>
 
-            <table className="rw-table">
-              <thead><tr><th>Product Name</th><th>Price (₦)</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody>
-                {products.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <input
-                        style={{ width: "100%", padding: "6px 8px" }}
-                        value={p.name}
-                        onChange={(e) => updateProductField(p.id, "name", e.target.value)}
-                        onBlur={() => persistProduct(products.find((x) => x.id === p.id))}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number" step="50" style={{ width: 100, padding: "6px 8px" }}
-                        value={p.price}
-                        onChange={(e) => updateProductField(p.id, "price", Number(e.target.value))}
-                        onBlur={() => persistProduct(products.find((x) => x.id === p.id))}
-                      />
-                    </td>
-                    <td>
-                      <span className={`rw-stock-badge ${p.stock <= 5 ? "rw-stock-low" : "rw-stock-ok"}`} style={{ marginRight: 8 }}>
-                        {p.stock} units
-                      </span>
-                    </td>
-                    <td>
-                      <select className="rw-status-select" value={p.status || "Active"} onChange={(e) => updateProductStatus(p.id, e.target.value)}>
-                        <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
-                      </select>
-                    </td>
-                    <td style={{ display: "flex", gap: 4 }}>
-                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => restock(p.id)}>
-                        Restock (+{RESTOCK_STEP})
-                      </button>
-                      <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => removeProduct(p.id)} title="Delete product">
-                        <Trash2 size={13} color="#e0473f" />
-                      </button>
-                    </td>
+            <div style={{ overflowX: "auto" }}>
+              <table className="rw-table">
+                <thead>
+                  <tr>
+                    <th>Product Name</th><th>Category</th><th>Description</th><th>Unit</th>
+                    <th>Price (₦)</th><th>Stock</th><th>Status</th><th>Restock</th><th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {products.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        <input style={{ width: 150, padding: "6px 8px" }} value={p.name || ""}
+                          onChange={(e) => updateProductField(p.id, "name", e.target.value)}
+                          onBlur={() => persistProduct(products.find((x) => x.id === p.id))} />
+                      </td>
+                      <td>
+                        <input style={{ width: 110, padding: "6px 8px" }} value={p.category || ""}
+                          onChange={(e) => updateProductField(p.id, "category", e.target.value)}
+                          onBlur={() => persistProduct(products.find((x) => x.id === p.id))} />
+                      </td>
+                      <td>
+                        <input style={{ width: 180, padding: "6px 8px" }} value={p.description || ""}
+                          onChange={(e) => updateProductField(p.id, "description", e.target.value)}
+                          onBlur={() => persistProduct(products.find((x) => x.id === p.id))} />
+                      </td>
+                      <td>
+                        <input style={{ width: 90, padding: "6px 8px" }} value={p.unit || "unit"}
+                          onChange={(e) => updateProductField(p.id, "unit", e.target.value)}
+                          onBlur={() => persistProduct(products.find((x) => x.id === p.id))} />
+                      </td>
+                      <td>
+                        <input type="number" min="0" step="0.01" style={{ width: 110, padding: "6px 8px" }}
+                          value={p.price ?? ""}
+                          onChange={(e) => updateProductField(p.id, "price", e.target.value === "" ? "" : Number(e.target.value))}
+                          onBlur={() => persistProduct(products.find((x) => x.id === p.id))} />
+                      </td>
+                      <td>
+                        <input type="number" min="0" step="1" style={{ width: 75, padding: "6px 8px" }}
+                          value={p.stock ?? 0}
+                          onChange={(e) => updateProductField(p.id, "stock", Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                          onBlur={() => persistProduct(products.find((x) => x.id === p.id))} />
+                      </td>
+                      <td>
+                        <select className="rw-status-select" value={p.status || "Active"} onChange={(e) => updateProductStatus(p.id, e.target.value)}>
+                          <option value="Active">Active</option>
+                          <option value="Inactive">Inactive</option>
+                        </select>
+                      </td>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <input aria-label={`Restock quantity for ${p.name}`} type="number" min="1" step="1"
+                            style={{ width: 65, padding: "6px 8px" }}
+                            value={restockQuantities[p.id] ?? "1"}
+                            onChange={(e) => setRestockQuantities((qs) => ({ ...qs, [p.id]: e.target.value }))} />
+                          <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => restock(p.id)}>Add</button>
+                        </div>
+                      </td>
+                      <td>
+                        <button className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => removeProduct(p.id)} title="Delete product">
+                          <Trash2 size={13} color="#e0473f" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {products.length === 0 && (
+                    <tr><td colSpan={9} style={{ color: "var(--ink-soft)", textAlign: "center", padding: 20 }}>No inventory products yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
