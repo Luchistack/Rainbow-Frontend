@@ -430,6 +430,8 @@ export function openPrintSlip(order, staffUser, onPrinted) {
           estimatedH += 48 + Math.ceil(String(r.desc || '').length / (is80 ? 25 : 16)) * 12;
         });
         estimatedH += (d.other ? 120 : 100) + (d.discount ? 20 : 0);
+        // Extra room for long item/description wrapping and the final totals/footer.
+        estimatedH += 120;
         estimatedH = Math.max(estimatedH, 420);
       }
 
