@@ -412,36 +412,35 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       var accentBlue = [39, 170, 225];
       var marginBottom = small ? 18 : 40;
 
-      // Estimate a long-roll page height before creating the PDF.
-      // The width remains the actual selected thermal-paper width.
-      var estimatedH = 0;
-      if (isThermal) {
-        estimatedH = 260;
-        estimatedH += String(d.bizName || '').length * (is80 ? 5 : 6);
-        estimatedH += String(d.contactLine || '').length * 3;
-        estimatedH += String(d.email || '').length * 3;
-        estimatedH += String(d.billTo || '').length * 3;
-        estimatedH += String(d.ref || '').length * 2;
-        estimatedH += String(d.status || '').length * 2;
-        estimatedH += String(d.paymentMethod || '').length * 2;
-        estimatedH += String(d.paymentStatus || '').length * 2;
-        estimatedH += Math.ceil(String(d.description || '').length / (is80 ? 25 : 16)) * 12;
-        (d.items || []).forEach(function (r) {
-          estimatedH += 48 + Math.ceil(String(r.desc || '').length / (is80 ? 25 : 16)) * 12;
-        });
-        estimatedH += (d.other ? 120 : 100) + (d.discount ? 20 : 0);
-        // Extra room for long item/description wrapping and the final totals/footer.
-        estimatedH += 120;
-        estimatedH = Math.max(estimatedH, 420);
-      }
+      // Calculate a sufficiently tall page before drawing anything.
+      // Keep the selected paper width; use a continuous receipt-height page
+      // for both A4-width and thermal PDFs.
+      var receiptTextLength = [
+        d.bizName, d.contactLine, d.whatsappLine, d.email, d.billTo,
+        d.phone, d.ref, d.date, d.status, d.paymentMethod,
+        d.paymentStatus, d.description, d.printedBy, d.printedAt,
+        d.subtotal, d.vat, d.total, d.other, d.discount
+      ].reduce(function (total, value) {
+        return total + String(value == null ? '' : value).length;
+      }, 0);
 
-      var doc = isThermal
-        ? new jsPDFCtor({
-            unit: 'pt',
-            format: [pageW, estimatedH],
-            compress: true
-          })
-        : new jsPDFCtor({ unit: 'pt', format: 'a4' });
+      (d.items || []).forEach(function (r) {
+        receiptTextLength += String(r.desc || '').length;
+        receiptTextLength += String(r.qty == null ? '' : r.qty).length;
+        receiptTextLength += String(r.unitPrice == null ? '' : r.unitPrice).length;
+        receiptTextLength += String(r.amount == null ? '' : r.amount).length;
+      });
+
+      var estimatedH = Math.max(
+        900,
+        700 + (d.items || []).length * 100 + receiptTextLength * 1.5
+      );
+
+      var doc = new jsPDFCtor({
+        unit: 'pt',
+        format: [pageW, estimatedH],
+        compress: true
+      });
 
       // Use the real page dimensions supplied by jsPDF.
       pageW = doc.internal.pageSize.getWidth();
@@ -733,13 +732,6 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       y += printedBy.length * lineGap;
       var printedAt = doc.splitTextToSize(String(d.printedAt || ''), contentW);
       doc.text(printedAt, left, y);
-
-      // Expand the final PDF page to contain every rendered receipt section.
-      // Preserve the selected width for thermal and A4 formats.
-      var requiredHeight = y + (printedAt.length * lineGap) + marginBottom;
-      if (requiredHeight > doc.internal.pageSize.getHeight()) {
-        doc.internal.pageSize.height = requiredHeight;
-      }
 
       return doc;
     }
