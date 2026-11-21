@@ -734,13 +734,11 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       var printedAt = doc.splitTextToSize(String(d.printedAt || ''), contentW);
       doc.text(printedAt, left, y);
 
-      // Expand thermal paper to fit the complete rendered receipt.
-      // This protects long orders without changing the selected paper width.
-      if (isThermal) {
-        var requiredHeight = y + (printedAt.length * lineGap) + marginBottom;
-        if (requiredHeight > doc.internal.pageSize.getHeight()) {
-          doc.internal.pageSize.setHeight(requiredHeight);
-        }
+      // Expand the final PDF page to contain every rendered receipt section.
+      // Preserve the selected width for thermal and A4 formats.
+      var requiredHeight = y + (printedAt.length * lineGap) + marginBottom;
+      if (requiredHeight > doc.internal.pageSize.getHeight()) {
+        doc.internal.pageSize.height = requiredHeight;
       }
 
       return doc;
