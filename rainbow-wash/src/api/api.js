@@ -436,3 +436,16 @@ export const markSubscriptionPurchasePrinted = async (dbId) => {
   }
   return mapRef(data);
 };
+
+
+// Search previous walk-in customer records.
+export const searchCustomers = async (query) => {
+  const response = await fetch(`${API_BASE_URL}/customers/search?q=${encodeURIComponent(query)}`, {
+    headers: getAuthHeaders(),
+  });
+  const data = await response.json().catch(() => []);
+  if (!response.ok) {
+    throw new Error(data.message || data.error || "Failed to search customers");
+  }
+  return Array.isArray(data) ? data : [];
+};

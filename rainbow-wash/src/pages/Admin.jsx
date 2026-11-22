@@ -11,6 +11,7 @@ import { money, formatPlacedAt, matchesRange, genRef, roundedMoneyParts } from "
 import { useApp } from "../context/AppContext";
 import { openPrintSlip, openExpressQuotePrintSlip } from "../utils/print";
 import { openSubscriptionPrintSlip } from "../utils/subscriptionPrint";
+import CustomerLookup from "../components/CustomerLookup";
 import {
   loginAdmin, logoutUser, createEmployee, fetchEmployees, resetEmployeePassword, deleteEmployee, changePassword,
   createProduct, updateProduct, deleteProduct, createBooking, updateBooking,
@@ -19,6 +20,7 @@ import {
   fetchExpressQuoteRequests, updateExpressQuoteRequest,
   fetchManageSubscriptionPlans, createSubscriptionPlan, updateSubscriptionPlan, deleteSubscriptionPlan,
   fetchSubscriptionPurchases, createSubscriptionPurchase,
+  searchCustomers,
   updateSubscriptionPurchasePaymentStatus, markSubscriptionPurchasePrinted,
 } from "../api/api";
 
@@ -2199,7 +2201,18 @@ export default function Admin() {
                 )}
 
                 <div className="rw-form-grid" style={{ marginBottom: 12 }}>
-                  <div><label>Customer name</label><input value={draftFullName} onChange={(e) => setDraftFullName(e.target.value)} placeholder="Walk-in customer" /></div>
+                  <CustomerLookup
+                    value={draftFullName}
+                    onChange={setDraftFullName}
+                    onSelect={(customer) => {
+                      setDraftFullName(customer.fullName || "");
+                      setDraftPhone(customer.phone || "");
+                      setDraftEmail(customer.email || "");
+                      setDraftAddress(customer.address || "");
+                    }}
+                    searchCustomers={searchCustomers}
+                    placeholder="Walk-in customer"
+                  />
                   <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} placeholder="0803 123 4567" /></div>
                   <div><label>Email (optional)</label><input type="email" autoComplete="email" value={draftEmail} onChange={(e) => setDraftEmail(e.target.value)} placeholder="customer@example.com" /></div>
                 </div>
@@ -2325,7 +2338,17 @@ export default function Admin() {
                   </div>
                   <div><label>Date</label><input type="date" value={draftBookingDate} onChange={(e) => setDraftBookingDate(e.target.value)} /></div>
                   <div><label>Time</label><input type="time" value={draftBookingTime} onChange={(e) => setDraftBookingTime(e.target.value)} /></div>
-                  <div><label>Customer name</label><input value={draftFullName} onChange={(e) => setDraftFullName(e.target.value)} /></div>
+                  <CustomerLookup
+                    value={draftFullName}
+                    onChange={setDraftFullName}
+                    onSelect={(customer) => {
+                      setDraftFullName(customer.fullName || "");
+                      setDraftPhone(customer.phone || "");
+                      setDraftEmail(customer.email || "");
+                      setDraftAddress(customer.address || "");
+                    }}
+                    searchCustomers={searchCustomers}
+                  />
                   <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} /></div>
                   <div>
                     <label>Email (optional)</label>
@@ -2472,7 +2495,15 @@ export default function Admin() {
                 )}
 
                 <div className="rw-form-grid" style={{ marginBottom: 12 }}>
-                  <div><label>Customer name</label><input value={draftFullName} onChange={(e) => setDraftFullName(e.target.value)} /></div>
+                  <CustomerLookup
+                    value={draftFullName}
+                    onChange={setDraftFullName}
+                    onSelect={(customer) => {
+                      setDraftFullName(customer.fullName || "");
+                      setDraftPhone(customer.phone || "");
+                    }}
+                    searchCustomers={searchCustomers}
+                  />
                   <div><label>Phone</label><input value={draftPhone} onChange={(e) => setDraftPhone(e.target.value)} /></div>
                 </div>
                 <div style={{ marginBottom: 12 }}><label>Description (optional)</label><textarea rows={2} maxLength={1000} value={draftDescription} onChange={(e) => setDraftDescription(e.target.value)} placeholder="e.g. Please pack each item separately." /></div>
@@ -3285,10 +3316,15 @@ export default function Admin() {
             <h4 style={{ fontSize: 14, marginBottom: 10 }}>Record a walk-in subscription</h4>
             <div className="rw-form-grid" style={{ marginBottom: 22, alignItems: "end" }}>
               <div>
-                <label>Customer name</label>
-                <input
+                <CustomerLookup
                   value={subscriptionPurchaseDraft.customerName}
-                  onChange={(e) => setSubscriptionPurchaseDraft((s) => ({ ...s, customerName: e.target.value }))}
+                  onChange={(value) => setSubscriptionPurchaseDraft((s) => ({ ...s, customerName: value }))}
+                  onSelect={(customer) => setSubscriptionPurchaseDraft((s) => ({
+                    ...s,
+                    customerName: customer.fullName || "",
+                    customerPhone: customer.phone || "",
+                  }))}
+                  searchCustomers={searchCustomers}
                   placeholder="Customer full name"
                 />
               </div>
