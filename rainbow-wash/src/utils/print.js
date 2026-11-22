@@ -212,6 +212,9 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     discount: discount > 0 ? `-${money(discount)}` : null,
     other: other > 1 ? money(other) : null,
     total: money(total),
+    accountName: "RAINBOW WASH LAUNDRY AND CLEANING SERVICES",
+    providusAccount: "1309775462",
+    kudaAccount: "3002626221",
     printedBy: `${staffUser?.name || "Staff"} (${staffUser?.role || "Staff"})`,
     printedAt,
     fileName: `${order.id}-receipt.pdf`,
@@ -357,6 +360,13 @@ export function openPrintSlip(order, staffUser, onPrinted) {
     <div class="grand"><span>Total</span><span>${money(total)}</span></div>
   </div>
 
+  <div class="payment-details">
+    <div><b>PAYMENT DESCRIPTION</b></div>
+    <div><b>Account Name:</b> RAINBOW WASH LAUNDRY AND CLEANING SERVICES</div>
+    <div><b>Providus Bank:</b> 1309775462</div>
+    <div><b>Kuda Bank:</b> 3002626221</div>
+  </div>
+
   <div class="foot">
     <span>Printed by: ${staffUser?.name || "Staff"} (${staffUser?.role || "Staff"})</span>
     <span>${printedAt}</span>
@@ -419,7 +429,8 @@ export function openPrintSlip(order, staffUser, onPrinted) {
         d.bizName, d.contactLine, d.whatsappLine, d.email, d.billTo,
         d.phone, d.ref, d.date, d.status, d.paymentMethod,
         d.paymentStatus, d.description, d.printedBy, d.printedAt,
-        d.subtotal, d.vat, d.total, d.other, d.discount
+        d.subtotal, d.vat, d.total, d.other, d.discount,
+        d.accountName, d.providusAccount, d.kudaAccount
       ].reduce(function (total, value) {
         return total + String(value == null ? '' : value).length;
       }, 0);
@@ -716,7 +727,22 @@ export function openPrintSlip(order, staffUser, onPrinted) {
       doc.text('TOTAL', labelX, ty);
       doc.text(String(d.total), amountX, ty, { align: 'right' });
 
-      y += boxH + (small ? 25 : 55);
+      y += boxH + 55;
+      doc.setFont(undefined, 'bold');
+      doc.setFontSize(small ? fontSmall : 9);
+      doc.setTextColor(40, 40, 40);
+      var accountLines = [
+        'PAYMENT DESCRIPTION',
+        'Account Name: ' + String(d.accountName || ''),
+        'Providus Bank: ' + String(d.providusAccount || ''),
+        'Kuda Bank: ' + String(d.kudaAccount || '')
+      ];
+      accountLines.forEach(function (line) {
+        var wrapped = doc.splitTextToSize(line, contentW);
+        doc.text(wrapped, left, y);
+        y += wrapped.length * lineGap;
+      });
+      y += small ? 8 : 12;
       doc.setDrawColor(221, 221, 221);
       doc.setLineWidth(0.7);
       doc.line(left, y - 10, right, y - 10);

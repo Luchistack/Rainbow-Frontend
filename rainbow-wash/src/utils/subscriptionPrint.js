@@ -307,6 +307,12 @@ export const openSubscriptionPrintSlip = (purchase, staffUser, onPrinted) => {
         <div><span class="detail-label">Payment method</span><span class="detail-value">${paymentMethod || "—"}</span></div>
         <div><span class="detail-label">Payment status</span><span class="detail-value">${paymentStatus || "—"}</span></div>
       </div>
+      <div class="details" style="margin-top: 14px;">
+        <div><b>PAYMENT DESCRIPTION</b></div>
+        <div><span class="detail-label">Account name</span><span class="detail-value">RAINBOW WASH LAUNDRY AND CLEANING SERVICES</span></div>
+        <div><span class="detail-label">Providus Bank</span><span class="detail-value">1309775462</span></div>
+        <div><span class="detail-label">Kuda Bank</span><span class="detail-value">3002626221</span></div>
+      </div>
     </section>
 
     <section class="section">
