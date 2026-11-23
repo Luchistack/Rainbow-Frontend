@@ -3861,29 +3861,191 @@ export default function Admin() {
                     {editingRecordType === "Laundry" ? (
                       <>
                         <h4 style={{ margin: "20px 0 10px", fontSize: 14 }}>Laundry items</h4>
-                        {(v.items || []).map((item, index) => (
-                          <div key={index} style={{ display: "grid", gridTemplateColumns: "minmax(120px, 2fr) minmax(65px, .7fr) minmax(75px, .8fr) minmax(90px, 1fr) auto", gap: 7, alignItems: "end", marginBottom: 9 }}>
-                            <div>
-                              <label style={labelStyle}>Item</label>
-                              <input value={item.name || ""} onChange={(e) => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.map((x, i) => i === index ? { ...x, name: e.target.value } : x) } }))} style={fieldStyle} />
-                            </div>
-                            <div>
-                              <label style={labelStyle}>Qty</label>
-                              <input type="number" min="0.01" step="any" value={item.qty ?? ""} onChange={(e) => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.map((x, i) => i === index ? { ...x, qty: e.target.value } : x) } }))} style={fieldStyle} />
-                            </div>
-                            <div>
-                              <label style={labelStyle}>Unit</label>
-                              <input value={item.unit || ""} onChange={(e) => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.map((x, i) => i === index ? { ...x, unit: e.target.value } : x) } }))} style={fieldStyle} />
-                            </div>
-                            <div>
-                              <label style={labelStyle}>Price (₦)</label>
-                              <input type="number" min="0" step="any" value={item.price ?? ""} onChange={(e) => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.map((x, i) => i === index ? { ...x, price: e.target.value } : x) } }))} style={fieldStyle} />
-                            </div>
-                            <button type="button" className="rw-btn rw-btn-ghost rw-btn-sm" title="Remove item" onClick={() => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: current.values.items.filter((_, i) => i !== index) } }))}><Trash2 size={14} /></button>
-                          </div>
-                        ))}
-                        <button type="button" className="rw-btn rw-btn-ghost rw-btn-sm" onClick={() => setRecordEditDraft((current) => ({ ...current, values: { ...current.values, items: [...current.values.items, { name: "", qty: 1, unit: "pcs", price: 0 }] } }))}><Plus size={13} /> Add item</button>
+                        {(() => {
+                          const editableLaundryItems = [
+                            ...(selfWashRates || []).map((r) => ({
+                              name: `Self Wash, ${r.label}`,
+                              unit: "kg",
+                              price: Number(r.price),
+                            })),
+                            ...(staffWashRates || []).map((r) => ({
+                              name: `Staff Wash, ${r.label}`,
+                              unit: "kg",
+                              price: Number(r.price),
+                            })),
+                            ...(dryCleanItems || []).flatMap((item) => [
+                              {
+                                name: `${item.label} (Regular)`,
+                                unit: "",
+                                price: Number(item.regular),
+                              },
+                              {
+                                name: `${item.label} (Deep Clean)`,
+                                unit: "",
+                                price: Number(item.deep),
+                              },
+                            ]),
+                            ...(shoeCareItems || []).flatMap((item) => [
+                              {
+                                name: `${item.label} (Regular)`,
+                                unit: "",
+                                price: Number(item.regular),
+                              },
+                              {
+                                name: `${item.label} (Deep Clean)`,
+                                unit: "",
+                                price: Number(item.deep),
+                              },
+                              {
+                                name: `${item.label} (Minor Repairs)`,
+                                unit: "",
+                                price: Number(item.repair),
+                              },
+                            ]),
+                            ...(expressServices || [])
+                              .filter((service) => service.available !== false)
+                              .flatMap((service) =>
+                                (service.expressPricingOptions || []).filter((option) => option.available !== false).map((option) => ({
+                                  name: `Express: ${service.label} (${option.turnaround || service.turnaround || "Standard"}${option.pricingUnit ? `, ${option.pricingUnit}` : ""})`,
+                                  unit: /kg/i.test(String(option.pricingUnit || "")) ? "kg" : "",
+                                  price: Number(option.price),
+                                }))
+                              ),
+                            ...(addonProducts || []).map((item) => ({
+                              name: item.label,
+                              unit: "",
+                              price: Number(item.price),
+                            })),
+                            ...(customServiceCategories || []).flatMap((category) =>
+                              (category.services || [])
+                                .filter((service) => service.available !== false)
+                                .map((service) => ({
+                                  name: `${category.name} — ${service.name}${service.pricingUnit ? ` (${service.pricingUnit})` : ""}`,
+                                  unit: /kg/i.test(String(service.pricingUnit || "")) ? "kg" : "",
+                                  price: Number(service.price),
+                                }))
+                            ),
+                          ].filter((item) => item.name && Number.isFinite(item.price));
 
+                          const itemOptions = (currentItem) => {
+                            const options = [...editableLaundryItems];
+                            if (currentItem?.name && !options.some((option) => option.name === currentItem.name)) {
+                              options.unshift({
+                                name: currentItem.name,
+                                unit: currentItem.unit || "",
+                                price: Number(currentItem.price),
+                                historical: true,
+                              });
+                            }
+                            return options;
+                          };
+
+                          const updateLaundryItem = (index, selectedName) => {
+                            const selected = editableLaundryItems.find((option) => option.name === selectedName);
+                            setRecordEditDraft((current) => ({
+                              ...current,
+                              values: {
+                                ...current.values,
+                                items: current.values.items.map((x, i) =>
+                                  i === index
+                                    ? selected
+                                      ? { ...x, name: selected.name, unit: selected.unit, price: selected.price }
+                                      : { ...x, name: selectedName }
+                                    : x
+                                ),
+                              },
+                            }));
+                          };
+
+                          return (
+                            <>
+                              {(v.items || []).map((item, index) => (
+                                <div key={index} style={{ display: "grid", gridTemplateColumns: "minmax(180px, 2fr) minmax(65px, .7fr) minmax(75px, .8fr) minmax(90px, 1fr) auto", gap: 7, alignItems: "end", marginBottom: 9 }}>
+                                  <div>
+                                    <label style={labelStyle}>Item</label>
+                                    <select
+                                      value={item.name || ""}
+                                      onChange={(e) => updateLaundryItem(index, e.target.value)}
+                                      style={fieldStyle}
+                                    >
+                                      <option value="">Select item</option>
+                                      {itemOptions(item).map((option) => (
+                                        <option key={`${option.name}-${option.historical ? "historical" : "catalog"}`} value={option.name}>
+                                          {option.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label style={labelStyle}>Qty</label>
+                                    <input
+                                      type="number"
+                                      min="0.01"
+                                      step="any"
+                                      value={item.qty ?? ""}
+                                      onChange={(e) => setRecordEditDraft((current) => ({
+                                        ...current,
+                                        values: {
+                                          ...current.values,
+                                          items: current.values.items.map((x, i) => i === index ? { ...x, qty: e.target.value } : x),
+                                        },
+                                      }))}
+                                      style={fieldStyle}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label style={labelStyle}>Unit</label>
+                                    <input value={item.unit || ""} readOnly style={{ ...fieldStyle, background: "#f8fafc" }} />
+                                  </div>
+                                  <div>
+                                    <label style={labelStyle}>Price (₦)</label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="any"
+                                      value={item.price ?? ""}
+                                      onChange={(e) => setRecordEditDraft((current) => ({
+                                        ...current,
+                                        values: {
+                                          ...current.values,
+                                          items: current.values.items.map((x, i) => i === index ? { ...x, price: e.target.value } : x),
+                                        },
+                                      }))}
+                                      style={fieldStyle}
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="rw-btn rw-btn-ghost rw-btn-sm"
+                                    title="Remove item"
+                                    onClick={() => setRecordEditDraft((current) => ({
+                                      ...current,
+                                      values: {
+                                        ...current.values,
+                                        items: current.values.items.filter((_, i) => i !== index),
+                                      },
+                                    }))}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                className="rw-btn rw-btn-ghost rw-btn-sm"
+                                onClick={() => setRecordEditDraft((current) => ({
+                                  ...current,
+                                  values: {
+                                    ...current.values,
+                                    items: [...current.values.items, { name: "", qty: 1, unit: "", price: 0 }],
+                                  },
+                                }))}
+                              >
+                                <Plus size={13} /> Add item
+                              </button>
+                            </>
+                          );
+                        })()}
                         <h4 style={{ margin: "20px 0 10px", fontSize: 14 }}>Fulfilment and charges</h4>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
                           {choice("Fulfilment", "fulfilment", ["dropoff", "pickup"])}
