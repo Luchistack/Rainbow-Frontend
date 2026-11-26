@@ -14,7 +14,7 @@ import { openSubscriptionPrintSlip } from "../utils/subscriptionPrint";
 import CustomerLookup from "../components/CustomerLookup";
 import {
   loginAdmin, logoutUser, createEmployee, fetchEmployees, resetEmployeePassword, deleteEmployee, changePassword,
-  createProduct, updateProduct, deleteProduct, createBooking, updateBooking,
+  fetchProducts, createProduct, updateProduct, deleteProduct, createBooking, updateBooking,
   createOrder, updateOrder, deleteOrder, createShopOrder, updateShopOrder, deleteShopOrder, deleteBooking,
   createLaundryService, updateLaundryService, deleteLaundryService,
   fetchExpressQuoteRequests, updateExpressQuoteRequest,
@@ -1467,7 +1467,12 @@ export default function Admin() {
   const openDraft = (type) => {
     resetDraft();
     setDraftType(type);
-    if (type === "shop" && products?.length) setDraftProductId(products[0].id);
+    if (type === "shop") {
+      const firstInventoryProduct = products.find((p) => (p.status || "Active") === "Active");
+      const firstAddonProduct = addonProducts[0];
+      if (firstInventoryProduct) setDraftProductId(`inventory:${firstInventoryProduct.id}`);
+      else if (firstAddonProduct) setDraftProductId(`addon:${firstAddonProduct.id}`);
+    }
     if (selfWashRates?.length) setDraftWashRateId(selfWashRates[0].id);
     if (dryCleanItems?.length) setDraftDcItemId(dryCleanItems[0].id);
     if (shoeCareItems?.length) setDraftScItemId(shoeCareItems[0].id);
@@ -1574,10 +1579,53 @@ export default function Admin() {
     })),
   ];
 
+  const validateDraftInventoryStock = (items) => {
+    const quantitiesByProduct = new Map();
+
+    items.forEach((item) => {
+      if (item.productId == null) return;
+      const key = String(item.productId);
+      quantitiesByProduct.set(key, (quantitiesByProduct.get(key) || 0) + (Number(item.qty) || 0));
+    });
+
+    for (const [productId, requestedQty] of quantitiesByProduct) {
+      const product = products.find((p) => String(p.id) === productId);
+      if (!product) {
+        notify("A selected inventory product could not be found. Refresh the product list and try again.");
+        return false;
+      }
+
+      const availableStock = Math.max(0, Number(product.stock) || 0);
+      if (availableStock <= 0) {
+        notify(`Out of stock: ${product.name} is currently unavailable (0 in stock).`);
+        return false;
+      }
+      if (requestedQty > availableStock) {
+        notify(`Insufficient stock: ${product.name} has ${availableStock} available, but ${requestedQty} requested.`);
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   const addDraftProductLine = () => {
-    const product = shopPickerItems.find((p) => String(p.id) === String(draftProductId));
-    if (!product) { notify("Products are still loading, try again in a moment"); return; }
-    addDraftItem(product.name, draftProductQty, product.price, "", product.productId ?? null);
+    const product =
+      shopPickerItems.find((p) => String(p.id) === String(draftProductId)) ||
+      shopPickerItems[0];
+
+    if (!product) {
+      notify("No shop products are currently available. Add or enable a product first.");
+      return;
+    }
+
+    const quantity = Math.max(1, Number(draftProductQty) || 1);
+    if (product.productId != null && !validateDraftInventoryStock([
+      ...draftItems,
+      { productId: product.productId, qty: quantity },
+    ])) return;
+
+    addDraftItem(product.name, quantity, product.price, "", product.productId ?? null);
   };
 
   const selectedDraftExpressService = expressServices.find(
@@ -1624,6 +1672,7 @@ export default function Admin() {
   const placeDraftLaundryOrder = async () => {
     if (draftItems.length === 0) { notify("Add at least one item first"); return; }
     if (!draftFullName.trim() || !draftPhone.trim()) { notify("Name and phone are required"); return; }
+    if (!validateDraftInventoryStock(draftItems)) return;
     const localOrder = {
       id: genRef("LND"),
       items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price, unit: i.unit })),
@@ -1638,15 +1687,23 @@ export default function Admin() {
     setPlacingDraft(true);
     try {
       const saved = await createOrder({
-        items: draftItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, price: i.price })),
+        items: draftItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, price: i.price, productId: i.productId ?? null })),
         fulfilment: effectiveDraftFulfilment, address: effectiveDraftFulfilment === "pickup" ? draftAddress : "",
         paymentMethod: "walk-in", deliveryFee: effectiveDraftFulfilment === "pickup" ? Math.max(DELIVERY_FEE, Number(draftDeliveryFee) || DELIVERY_FEE) : 0, total: draftTotal, discountPercentage: draftDiscountRate,
         fullName: draftFullName.trim(), phone: draftPhone.trim(), email: draftEmail.trim(),
         description: draftDescription.trim(), createdBy: currentUser?.name,
       });
       setLaundryOrders((os) => [saved, ...os]);
+      try {
+        const latestProducts = await fetchProducts();
+        if (latestProducts) setProducts(latestProducts);
+      } catch (refreshError) {
+        // Keep the successful order successful if the inventory refresh fails.
+      }
       notify(`Walk-in order ${saved.id || saved.referenceId} placed`);
       resetDraft();
+    } catch (error) {
+      notify(error?.message || "Failed to place laundry order. Please try again.");
     } finally {
       setPlacingDraft(false);
     }
@@ -1697,6 +1754,7 @@ export default function Admin() {
   const placeDraftShopOrder = async () => {
     if (draftItems.length === 0) { notify("Add at least one item first"); return; }
     if (!draftFullName.trim() || !draftPhone.trim()) { notify("Name and phone are required"); return; }
+    if (!validateDraftInventoryStock(draftItems)) return;
     const localOrder = {
       id: genRef("SHOP"),
       items: draftItems.map((i) => ({ name: i.name, qty: i.qty, price: i.price, productId: i.productId ?? null })),
@@ -1713,8 +1771,16 @@ export default function Admin() {
         description: draftDescription.trim(), total: draftShopTotal, createdBy: currentUser?.name,
       });
       setShopOrders((os) => [saved, ...os]);
+      try {
+        const latestProducts = await fetchProducts();
+        if (latestProducts) setProducts(latestProducts);
+      } catch (refreshError) {
+        // Keep the successful sale successful if the inventory refresh fails.
+      }
       notify(`Walk-in sale ${saved.id || saved.referenceId} placed`);
       resetDraft();
+    } catch (error) {
+      notify(error?.message || "Failed to place shop order. Please try again.");
     } finally {
       setPlacingDraft(false);
     }
